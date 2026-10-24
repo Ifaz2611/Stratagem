@@ -23,7 +23,7 @@ build/
 # examples between iterations and make cross-iteration comparisons dishonest.
 .hypothesis/
 
-# Coverage artifacts from the Phase 7 study
+# Coverage artifacts from the coverage study
 *.gcda
 *.gcno
 *.gcov

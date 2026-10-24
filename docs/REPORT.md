@@ -2,6 +2,17 @@
 
 **Target:** Mini-XML (mxml) `v4.0.4` at commit `0d5afc42`.
 
+## Executive Summary
+
+This project demonstrates using Large Language Models (LLMs) to drive grammar-based fuzzing of a C XML parser. An agent writes Hypothesis strategies in Python, tests them against Mini-XML, receives blackbox feedback, and iteratively refines the strategy. The framework is entirely blackbox—no code coverage signals are provided to the LLM, only parser results and input properties.
+
+**Key Results:**
+- Cost: $4.51 for a 5-iteration campaign (500 inputs per iteration)
+- Coverage: Grammar-based strategies achieved 38-45% parser coverage vs 13% random baseline
+- Findings: Fixed one upstream bug (PR #357), reproduced one known leak (issue #354)
+- Crashes: No memory-safety crashes or timeouts found in 10,000 tested inputs
+- Correlation: Distinct diagnostic count showed +0.76 correlation with coverage
+
 ## Overview
 
 This project tests a C XML parser with inputs generated from a formal grammar.

@@ -484,6 +484,96 @@ def test_replay_offset() -> None:
               ReplayBackend(root, start=-3).complete("", "").text == "first")
 
 
+# --------------------------------------------------------- transcript grouping
+def _write_call(root, n, tag, iteration=None, user=None, cost=0.0) -> None:
+    import json
+    from pathlib import Path
+
+    d = Path(root) / f"call-{n}"
+    d.mkdir()
+    rec = {"text": "", "backend": "cli", "tag": tag, "cost_usd": cost}
+    if iteration is not None:
+        rec["iteration"] = iteration
+    (d / "response.json").write_text(json.dumps(rec), encoding="utf-8")
+    if user is not None:
+        (d / "user.md").write_text(user, encoding="utf-8")
+
+
+def _loop_shell(root, kind="replay", resume=0):
+    from pathlib import Path
+
+    from agent.loop import Budget, Loop
+
+    loop = Loop.__new__(Loop)
+    loop.transcript = Path(root)
+    loop.backend_kind = kind
+    loop.resume_from = resume
+    loop.budget = Budget(max_iterations=5, max_usd=5.0)
+    loop._calls_cache = None
+    return loop
+
+
+def test_call_grouping() -> None:
+    import tempfile
+
+    def grouped(root):
+        return [len(g) for g in _loop_shell(root)._grouped_calls()]
+
+    # Legacy transcript: the tag alone cannot tell a resend from a new
+    # iteration, so the iteration must come from the refine prompt.
+    with tempfile.TemporaryDirectory() as td:
+        _write_call(td, 1, "seed")
+        _write_call(td, 2, "seed-repair1")
+        _write_call(td, 3, "refine", user="## Current strategy (iteration 1)")
+        _write_call(td, 4, "refine", user="## Current strategy (iteration 1)")
+        got = grouped(td)
+        check("group/resend stays in its iteration", got == [2, 2], str(got))
+
+    # New transcripts record the iteration, which also covers resends and
+    # campaign repairs without parsing the prompt.
+    with tempfile.TemporaryDirectory() as td:
+        _write_call(td, 1, "seed", iteration=0)
+        _write_call(td, 2, "refine", iteration=1)
+        _write_call(td, 3, "refine", iteration=1)
+        _write_call(td, 4, "refine-repair1", iteration=1)
+        _write_call(td, 5, "refine", iteration=2)
+        got = grouped(td)
+        check("group/recorded iteration wins", got == [1, 3, 1], str(got))
+
+    # A resumed transcript can skip an iteration; the index must still mean
+    # the iteration number, not the position in the list.
+    with tempfile.TemporaryDirectory() as td:
+        _write_call(td, 1, "seed", iteration=0)
+        _write_call(td, 3, "refine", iteration=2)
+        got = grouped(td)
+        check("group/gap is padded", got == [1, 0, 1], str(got))
+
+
+def test_resume_budget() -> None:
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as td:
+        _write_call(td, 1, "seed", iteration=0, cost=1.0)
+        _write_call(td, 2, "refine", iteration=1, cost=2.0)
+        _write_call(td, 3, "refine", iteration=2, cost=4.0)
+
+        # Replay re-reads calls from iteration 2 onward and charges them as it
+        # goes, so restoring them here would count the same money twice.
+        replay = _loop_shell(td, "replay", resume=2)
+        replay._restore_budget()
+        check("resume/replay does not double-charge", replay.budget.cost_usd == 3.0,
+              str(replay.budget.cost_usd))
+        check("resume/replay keeps numbering", replay.budget.calls == 3,
+              str(replay.budget.calls))
+
+        # A live backend is not re-reading anything: every recorded call is
+        # spend that already happened.
+        live = _loop_shell(td, "cli", resume=2)
+        live._restore_budget()
+        check("resume/live charges every recorded call", live.budget.cost_usd == 7.0,
+              str(live.budget.cost_usd))
+
+
 def main() -> int:
     test_diagnostics()
     test_features()
@@ -497,6 +587,8 @@ def main() -> int:
     test_env_loader()
     test_encoding_declaration()
     test_replay_offset()
+    test_call_grouping()
+    test_resume_budget()
     print(f"passed={_passed} failed={len(_failed)}")
     for f in _failed:
         print(f"  FAIL {f}")

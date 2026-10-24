@@ -1,11 +1,18 @@
-# Comparing the generated strategies
+# Comparing Generated Strategies
 
-The primary evaluation is one agentic fuzzing run, reported as `runs/loop-c`.
-I ran several other configurations to study three questions:
+This document compares different generated strategies across multiple experimental runs. The primary evaluation is one agentic fuzzing run, reported as `runs/loop-c`. Several other configurations were run to study three key questions:
 
 1. How much does the first prompt affect the strategy?
 2. Do later iterations improve the strategy?
 3. Do the blackbox feedback signals track parser coverage?
+
+## Key Findings Summary
+
+- **Grammar-based strategies significantly outperformed random text**: 38-45% coverage vs 13% baseline
+- **First prompt matters most**: The initial grammar-based strategy produced the largest improvement
+- **Refinement gains were modest**: Later iterations improved coverage by 0.8-1.6 points
+- **Distinct diagnostics correlated best with coverage**: +0.76 correlation across all strategies
+- **Model variance is substantial**: Two identical v2 Sonnet generations differed by 2.12 points
 
 I used line coverage of `mxml-file.c` as an evaluation measure. The file has
 833 measured lines. Coverage was collected after the fuzzing runs and was never

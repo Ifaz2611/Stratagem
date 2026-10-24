@@ -42,14 +42,14 @@ ENV PATH="/opt/venv/bin:$PATH"
 # time) means `docker run` needs no network, so a reader can reproduce the
 # fuzzing half fully offline.
 COPY scripts/fetch_target.sh ./scripts/
-RUN ./scripts/fetch_target.sh
+RUN bash ./scripts/fetch_target.sh
 
 COPY . .
 
 # Build the sanitizer harness here too. Replay mode needs a real binary to run
 # recorded inputs through; without this step the image would start, accept a
 # replay command, and then fail when the campaign looked for build/asan/harness.
-RUN ./harness/build.sh asan
+RUN bash ./harness/build.sh asan
 
 # .env is gitignored and .dockerignored: secrets are injected at run time by
 # run.sh via --env-file, never baked into the image.

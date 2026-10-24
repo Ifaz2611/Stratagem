@@ -1,9 +1,6 @@
 # Findings
 
-The historical campaigns tested 10,000 documents from 19 generated strategies
-and one random-text baseline. They found no memory-safety crash and no timeout.
-The work produced one upstream fix, reproduced one known leak, and identified a
-smaller diagnostic limitation.
+This document summarizes the results of historical campaigns that tested 10,000 documents from 19 generated strategies and one random-text baseline against Mini-XML v4.0.4. The campaigns found no memory-safety crashes and no timeouts, but did produce one upstream fix, reproduced one known leak, and identified a diagnostic limitation.
 
 ## F1. Non-ASCII characters damaged error messages
 

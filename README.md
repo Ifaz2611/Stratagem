@@ -1,241 +1,274 @@
-# Stratagem
+# Stratagem: Agentic Grammar Fuzzing
 
-**Agentic grammar fuzzing for C parsers.**
+A blackbox fuzzing framework that uses Large Language Models (LLMs) to generate and refine test strategies for parsing software. The project demonstrates agentic fuzzing by targeting the Mini-XML (mxml) parser v4.0.4.
 
-Stratagem is a blackbox fuzzer whose test-case generator is written by a
-language model. On each iteration the model receives a pinned formal grammar and
-the measured results of the previous batch, and returns a Hypothesis strategy.
-The strategy is validated, run against a sanitizer-instrumented target, and
-measured; that measurement becomes the next prompt. The loop stops on an
-iteration cap or a spend cap.
+## Overview
 
-A *stratagem* is a plan or scheme. Here the plans are Hypothesis strategies, and
-the model is the strategist.
+This project explores using LLMs as the driving intelligence behind a grammar-based fuzzer. Instead of traditional mutation-based fuzzing, an agent writes Hypothesis strategies in Python, tests them against a real C parser, receives feedback, and iteratively improves the strategy.
 
-This repository contains the full pipeline, the recorded transcripts and
-corpora of the reported campaigns, and the evaluation code. The target used for
-the published results is [Mini-XML (mxml)](https://github.com/michaelrsweet/mxml)
-v4.0.4, but the loop is target-agnostic apart from the harness and the grammar
-in `grammar/`.
+### Key Features
 
----
+- **Agentic Loop**: LLM generates Python strategies → tests them → receives feedback → refines
+- **Blackbox Operation**: No code coverage signals; works only with parser results and input properties
+- **Multiple LLM Backends**: Claude Code CLI, OpenAI-compatible APIs, and replay mode
+- **Grammar-Based**: Uses ANTLR XML grammar adapted for the target parser
+- **Sanitizer Integration**: AddressSanitizer and UndefinedBehaviorSanitizer for crash detection
+- **Reproducible**: All LLM interactions are recorded for replay without credentials
 
-## How it works
+### Project Structure
 
 ```
-formal grammar ──► LLM writes strategy ──► validate ──► run 500 inputs
-                          ▲                                   │
-                          │                                   ▼
-                    refine prompt ◄──── summary ◄──── harness + measurement
+.
+├── agent/           # Agentic loop and LLM backends
+│   ├── loop.py      # Main iteration logic
+│   ├── llm.py       # LLM backend implementations
+│   ├── validate.py  # Strategy validation gates
+│   └── prompts/     # Prompt templates (v1-v5)
+├── fuzzer/          # Fuzzing engine
+│   ├── campaign.py  # Run strategies through harness
+│   ├── runner.py    # Execute harness and classify results
+│   ├── features.py  # Analyze generated documents
+│   ├── strategies/  # Generated strategy modules
+│   └── triage.py    # Crash deduplication
+├── grammar/         # ANTLR XML grammar
+│   ├── XMLParser.g4
+│   ├── XMLLexer.g4
+│   └── ADAPTATIONS.md
+├── harness/         # C harness for mxml
+│   ├── harness.c
+│   └── build.sh
+├── docs/            # Documentation
+│   ├── design-decisions.md
+│   ├── findings.md
+│   └── REPORT.md
+├── scripts/         # Utility scripts
+├── runs/            # Campaign outputs
+└── run.sh           # Docker entry point
 ```
 
-1. **Seed.** The model gets `XMLParser.g4` / `XMLLexer.g4` (pinned by commit and
-   checksum) plus the measured differences between that grammar and the real
-   parser. It returns one fenced Python module exposing
-   `documents() -> SearchStrategy[str]`.
-2. **Gate.** The response is checked for a complete code block, compiled,
-   imported in a subprocess, and sampled. A 50-document smoke run rejects
-   generators that bounce off the parser's front door or drift outside the
-   required mix of well-formed, near-miss, and byte-hostile inputs.
-3. **Campaign.** The accepted strategy runs for up to 500 documents (10-minute
-   wall-clock cap). Each input goes through the ASan/UBSan harness; outcomes,
-   parser diagnostics, structural features, timing, and crash signatures are
-   recorded.
-4. **Refine.** The next prompt carries the previous source, per-class
-   acceptance, new diagnostics and productions, boundary distributions, and a
-   rotating directive. The model returns a revised strategy.
+## Target: Mini-XML v4.0.4
 
-Everything the model sees and says is written to `runs/<id>/transcript/`, and
-every input is written to `runs/<id>/iterations/iter-N/corpus.jsonl.gz`, so a
-run can be audited and replayed without credentials.
+The project fuzzes [Mini-XML](https://github.com/michaelrsweet/mxml), a small C XML library, pinned to commit `0d5afc42` (v4.0.4). mxml was chosen because:
 
-### Feedback is blackbox
+- Small and well-maintained codebase
+- Provides detailed error messages through callbacks
+- Has recursive XML structure suitable for grammar-based generation
+- Parses iteratively (not recursively), avoiding trivial stack overflow
 
-The loop never receives code coverage. It works from:
+## How It Works
 
-- process outcomes (parsed, parsed-with-diagnostics, rejected, crash, timeout),
-- the parser's own diagnostics, normalised into stable templates,
-- structural properties of the generated input (27 grammar- and
-  parser-specific productions, nesting depth, boundary sizes),
-- acceptance rate overall and per input class.
+### The Agentic Loop
 
-Coverage is measured **after** a campaign, by separate scripts, and is never fed
-back to the model. See `docs/design-decisions.md` (D2, D6).
+Each iteration follows these steps:
 
----
+1. **Generate**: LLM writes a Python Hypothesis strategy based on XML grammar
+2. **Validate**: Four-gate validation checks syntax, interface, and smoke testing
+3. **Run**: Execute 500 generated documents through the sanitizer-instrumented harness
+4. **Summarize**: Measure acceptance rate, diagnostic diversity, structural coverage
+5. **Refine**: Feed summary back to LLM with instructions to improve
 
-## Quick start
+### Input Classification
 
-The supported environment is the container: it pins the compiler and sets the
-sanitizer options the measurements depend on.
+Documents are classified into three buckets:
 
-```sh
-cp .env.example .env          # optional; replay needs no credentials
-./run.sh build                # target + ASan harness + Python deps
+- **well_formed**: Should parse cleanly
+- **near_miss**: Structurally wrong but XML-shaped (e.g., `<a></b>`)
+- **byte_hostile**: Encoding issues, control bytes, truncation
+
+The loop steers the generator to maintain a healthy mixture across all three.
+
+### Crash Detection
+
+The C harness (`harness/harness.c`) classifies results via exit codes:
+
+- `0`: Parsed without diagnostics
+- `3`: Parsed with diagnostics (mxml's "parsed-but-complained" state)
+- `1`: Rejected (well-formed rejection, not a crash)
+- `2`: Harness error
+- Signal/sanitizer abort: Crash
+
+Sanitizers (ASan, UBSan) are configured to abort on error rather than continue.
+
+## Findings
+
+The historical campaigns (10,000 inputs from 19 strategies) found:
+
+- **Fixed upstream**: Non-ASCII character damage in error messages (PR #357)
+- **Reproduced**: Known leak on `<a a>` error path (issue #354)
+- **Coverage**: Grammar-based strategies achieved 38-45% parser coverage vs 13% random baseline
+- **No crashes**: No memory-safety crashes or timeouts found
+
+See `docs/findings.md` for detailed analysis.
+
+## Installation
+
+### Prerequisites
+
+- Docker (for containerized builds)
+- Python 3.10+ with virtual environment
+- For LLM backends: Claude Code CLI or OpenAI API key
+
+### Quick Start with Docker
+
+```bash
+# Build the container
+./run.sh build
+
+# Enter the container
 ./run.sh shell
-```
 
-Inside the container:
-
-```sh
-# 1. Unit checks for the measurement layer (no harness needed)
-python -m fuzzer.selftest
-
-# 2. Harness regression checks (needs the ASan build)
-./harness/smoke_test.sh
-
-# 3. One campaign against the baseline generator
-python -m fuzzer.campaign baseline -n 100
-
-# 4. The agentic loop, replaying the recorded run (no API key)
-cp -r runs/loop-c runs/demo
+# Inside the container, run a campaign
 python -m agent.loop --backend replay --run-id demo
-
-# 5. Verify a recorded run reproduces, inputs and generators
-./scripts/verify_replay.sh loop-c
 ```
 
-`verify_replay.sh` writes its comparison copy to `runs/<id>-replay/`, which is
-gitignored; it never overwrites the run being verified.
+### Local Development
 
-### Driving it with a model
+```bash
+# Create virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
-Set `LLM_BACKEND` in `.env` (or pass `--backend`):
+# Install dependencies
+pip install -r requirements.txt
 
-| backend | what it uses | credentials |
-|---|---|---|
-| `replay` | recorded transcript, no network | none (default) |
-| `openai` | any OpenAI-compatible `/v1/chat/completions` endpoint | `OPENAI_API_KEY`, `OPENAI_BASE_URL` |
-| `cli` | Claude Code headless (`claude -p`), billed to a subscription | `CLAUDE_CODE_OAUTH_TOKEN` (or an interactive login) |
+# Build the harness with sanitizers
+cd harness
+./build.sh
+cd ..
 
-```sh
-python -m agent.loop --backend openai --run-id trial-1 --max-usd 5
+# Run a campaign
+python -m agent.loop --backend replay --run-id my-run
 ```
 
-`--max-usd` is enforced when the backend reports a price (`cli`, and `replay`
-from the recorded costs). The OpenAI-compatible backend reports tokens but no
-per-call price, so the cap is advisory there; the summary records
-`cost_cap_enforced: false` rather than pretending otherwise.
+See [getstart.md](getstart.md) for detailed installation and usage instructions.
 
-The `cli` backend needs an image built with the CLI included:
+## Configuration
 
-```sh
-./run.sh build --with-cli
+Copy `.env.example` to `.env` and configure your LLM backend:
+
+```bash
+cp .env.example .env
 ```
 
----
+Available backends:
 
-## What the published runs found
+- `replay` (default): No credentials, replays recorded transcripts
+- `openai`: Any OpenAI-compatible endpoint (set `OPENAI_API_KEY` and `OPENAI_BASE_URL`)
+- `cli`: Claude Code headless (set `CLAUDE_CODE_OAUTH_TOKEN`)
 
-Across 10,000 historical inputs from 19 generated strategies plus a random-text
-baseline, the campaigns found **no memory-safety crash and no timeout**. They did
-produce:
+## Running Campaigns
 
-- **F1 — a real diagnostic defect, fixed upstream.** mxml formatted a decoded
-  code point with `%c`, which truncated some error messages and emitted invalid
-  UTF-8 for others. Reported in
-  [mxml PR #357](https://github.com/michaelrsweet/mxml/pull/357), fixed in
-  commit `d986100`. Details in `docs/findings.md`.
-- **F2 — a known index bug used as a positive control.** Upstream issue #350 is
-  reachable only through `mxmlIndexNew`, so the harness exposes it behind
-  `--index`. The smoke test requires the sanitizer build to catch it; a build
-  with sanitizers silently missing would otherwise report "no bugs found"
-  forever.
-- **F3 — an independent reproduction of a known leak.** Upstream issue #354,
-  reached by 8.2% of the historical corpus. Leak detection runs as a separate
-  pass so it does not bury fatal memory errors.
+### Basic Campaign
 
-The reported five-iteration run (`runs/loop-c`) cost $4.51. Coverage and the
-proxy signals are compared in `docs/comparison.md`; the main result is that
-distinct parser diagnostics tracked line coverage far better than production
-count (pooled correlation +0.76 across 19 strategies).
-
-Read more:
-
-| document | contents |
-|---|---|
-| `docs/REPORT.md` | the full write-up: design, findings, limitations |
-| `docs/design-decisions.md` | why each engineering choice was made |
-| `docs/findings.md` | the defects and controls in detail |
-| `docs/comparison.md` | run-to-run comparison and coverage study |
-| `grammar/ADAPTATIONS.md` | measured differences between the grammar and mxml |
-
----
-
-## Layout
-
-```
-agent/                 the agentic loop
-  loop.py              budget, prompts, validation/repair, campaign, summary
-  llm.py               cli / openai-compatible / replay backends
-  validate.py          four validation gates
-  env.py               .env loader (real environment wins)
-  prompts/             v1..v5 prompt sets; v2 is the loop default
-fuzzer/                the fuzzing and measurement half
-  campaign.py          Hypothesis driver, budgets, summarisation
-  runner.py            runs the harness and classifies the outcome
-  features.py          structural production/depth/boundary analysis
-  diagnostics.py       normalises parser messages into templates
-  triage.py            sanitizer report parsing and crash signatures
-  corpus.py            byte-exact corpus recording and replay
-  minimize.py          Hypothesis shrinking plus determinism check
-  selftest.py          regression suite for the measurement layer
-  strategies/          baseline, byte probe, and generated strategies
-harness/               C harness, build script, smoke test, sample inputs
-grammar/               pinned ANTLR grammar and adaptation notes
-scripts/               fetch pins, coverage studies, leak pass, replay check
-runs/                  recorded campaigns, transcripts, corpora, analysis
-docs/                  report, design decisions, findings, comparison
+```bash
+python -m agent.loop \
+  --backend replay \
+  --run-id my-campaign \
+  --max-iterations 5 \
+  --max-examples 500 \
+  --max-usd 5.00
 ```
 
-### Recorded runs
+### With Specific Model
 
-| run | prompt set | model | iterations | cost |
-|---|---|---|---:|---:|
-| `runs/loop` (A) | v1 | Sonnet | 5 | $2.01 |
-| `runs/loop-b` (B) | v2 | Opus | 2 | $1.84 |
-| `runs/loop-c` (C) | v2 | Sonnet | 5 | $4.51 |
-| `runs/loop-d` (D) | v3 | Sonnet | 1 | $4.18 |
-| `runs/loop-e` (E) | v4 | Sonnet | 1 | $4.22 |
-| `runs/loop-f` (F) | v5 | Sonnet | 4 | $5.45 |
+```bash
+python -m agent.loop \
+  --backend openai \
+  --model gpt-5 \
+  --run-id gpt5-run
+```
 
-Runs B, D, and E stopped at an account usage limit; F exceeded the $5 cap and is
-kept for analysis only.
+### Resume Interrupted Run
 
----
+```bash
+python -m agent.loop \
+  --backend replay \
+  --run-id my-campaign \
+  --resume-from 2
+```
 
-## Reproducibility
+## Output
 
-- The target is pinned to mxml v4.0.4 at
-  `0d5afc4278d7a336d554602b951c2979c3f8f296`; `scripts/fetch_target.sh` checks
-  the commit after checkout.
-- The grammar is fetched from a pinned grammars-v4 commit and verified against
-  SHA-256 checksums (`scripts/fetch_grammar.sh`, `grammar/SOURCE.txt`).
-- `requirements.txt` pins Hypothesis, because its shrinker and draw sequence
-  change between releases.
-- Each iteration records the exact bytes fed to the harness, base64-encoded, in
-  `corpus.jsonl.gz`, plus a digest over the ordered corpus.
-- `scripts/verify_replay.sh` replays those bytes and compares every
-  classification and digest; it also replays the transcript and requires each
-  regenerated `strategy.py` to be byte-identical.
-- The harness build is checked for linked sanitizer symbols, and the smoke test
-  requires a known real bug to be detected.
+Each campaign creates a directory under `runs/`:
 
-The historical corpora predate the serializer correction described in
-`docs/design-decisions.md` D13. They still replay exactly; the corrected
-coverage study re-runs the saved strategy code instead of the old bytes.
+```
+runs/my-campaign/
+├── iterations/
+│   ├── iter-0/
+│   │   ├── strategy.py      # Generated strategy
+│   │   ├── summary.json     # Iteration summary
+│   │   └── results.jsonl    # Per-input results
+│   ├── iter-1/
+│   └── ...
+├── transcript/              # LLM prompts and responses
+│   ├── call-1/
+│   │   ├── system.md
+│   │   ├── user.md
+│   │   └── response.json
+│   └── ...
+└── final_summary.json
+```
 
----
+## Design Decisions
 
-## Scope and limitations
+Key engineering choices are documented in `docs/design-decisions.md`:
 
-- This is containment against accidental hangs, not a security sandbox. The
-  generated Python is validated and run in subprocesses with timeouts, but it is
-  model-authored code.
-- Stack-hash crash signatures are an estimate of root cause: they can merge
-  distinct bugs or split one bug (Klees et al., CCS 2018). The full normalised
-  trace is stored beside each signature.
-- Each LLM revision sequence was generated once. Three-seed coverage trials
-  measure input-sampling noise, not variation between model generations.
-- The published results cover one XML parser. Other parsers may respond
-  differently to the same feedback signals.
+- D1: Target selection (mxml v4.0.4)
+- D2: Blackbox boundary (no coverage in loop)
+- D3: UBSan stops the process
+- D4: Leak detection in separate pass
+- D5: Acceptance uses a range (40-70%)
+- D6: Gcov for evaluation only
+- D9: Reproducibility via recorded bytes
+- D13: Raw bytes through surrogateescape
+
+## Grammar Adaptations
+
+The ANTLR XML grammar is adapted for mxml's behavior. See `grammar/ADAPTATIONS.md` for:
+
+- Named entities (mxml only supports 4: amp, lt, gt, quot)
+- Matching tag names (grammar allows `<a></b>`, mxml rejects)
+- Character reference limits
+- Unquoted attributes (mxml accepts, grammar rejects)
+- Non-ASCII name ranges
+- And 6 more adaptations
+
+## Documentation
+
+- [getstart.md](getstart.md) - Installation and usage guide
+- [docs/design-decisions.md](docs/design-decisions.md) - Engineering rationale
+- [docs/findings.md](docs/findings.md) - Test results and bug reports
+- [docs/REPORT.md](docs/REPORT.md) - Project report
+- [grammar/ADAPTATIONS.md](grammar/ADAPTATIONS.md) - Grammar vs parser differences
+- [todo.md](todo.md) - Future expansion ideas
+
+## Research Context
+
+This project investigates:
+
+- Whether LLMs can effectively drive grammar-based fuzzing
+- Blackbox feedback signals without code coverage
+- Reproducibility in agentic systems
+- Cost-effectiveness vs traditional fuzzers (AFL, libFuzzer)
+
+The framework is designed to be extensible to other parsers and grammars.
+
+## License
+
+See individual component licenses. The project uses:
+
+- Mini-XML (LGPL with exceptions)
+- ANTLR grammars (BSD)
+- Hypothesis (MPL 2.0)
+- OpenAI Python SDK (Apache 2.0)
+
+## Contributing
+
+This is a research project. For suggestions or questions, please refer to the issues in the target repository (mxml) for any reported bugs.
+
+## Acknowledgments
+
+- Mini-XML by Michael R Sweet
+- ANTLR grammars-v4 community
+- Hypothesis testing library
+- Claude by Anthropic (for the Claude Code backend)

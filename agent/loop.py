@@ -183,6 +183,13 @@ class Loop:
             self._restore_budget()
             self._restore_feedback_unions()
 
+        # Call directories are numbered independently of budget.calls, which
+        # counts successful calls only. A failed call leaves a directory with
+        # no response.json, and numbering from budget.calls alone would reuse
+        # that number and overwrite the record of the failure.
+        self._call_seq = (max(self.budget.calls, self._last_call_number())
+                          if self.resume_from else 0)
+
         def mk(model):
             kw = {}
             if model:
@@ -192,8 +199,8 @@ class Loop:
             if self.backend_kind == "replay":
                 # Resume at the first recorded call of the resumed iteration,
                 # not at the end of the transcript: the loop will ask for that
-                # iteration's calls again. budget.calls stays at the full count
-                # so new transcript directories do not overwrite old ones.
+                # iteration's calls again. New calls are written after the
+                # existing directories, so nothing is overwritten.
                 kw["start"] = (sum(self._calls_per_iteration().get(i, 0)
                                    for i in range(self.resume_from))
                                if self.resume_from else 0)
@@ -242,10 +249,9 @@ class Loop:
     def _restore_budget(self) -> None:
         """Rebuild spend from the recorded transcript.
 
-        Transcript call directories are numbered from budget.calls, so without
-        restoring the count a resumed run overwrites call-1. The spend cap also
-        has to account for what was already spent, or a resumed run can exceed
-        the budget.
+        Without restoring the spend, a resumed run can exceed the budget. The
+        call-number sequence is restored separately, from the directories on
+        disk, so a resumed run appends rather than overwriting earlier calls.
 
         A replay resume re-reads the calls at and after the resume point and
         charges their recorded cost again as it goes, so those calls are
@@ -274,8 +280,8 @@ class Loop:
                 self.budget.authored_chars += len(u.read_text(encoding="utf-8"))
             if sysf.exists():
                 self.budget.authored_chars += len(sysf.read_text(encoding="utf-8"))
-        print(f"    [resume] restored {self.budget.calls} calls, "
-              f"${self.budget.cost_usd:.2f} already spent")
+        print(f"    [resume] restored {self.budget.calls} recorded calls, "
+              f"${self.budget.cost_usd:.2f} charged so far")
 
     def _restore_feedback_unions(self) -> None:
         """Restore all feedback observed before a resumed iteration.
@@ -302,6 +308,12 @@ class Loop:
         summary = json.loads((d / "summary.json").read_text(encoding="utf-8"))
         results = [json.loads(l) for l in (d / "results.jsonl").read_text(encoding="utf-8").splitlines()]
         return source, summary, results
+
+    def _last_call_number(self) -> int:
+        """Highest call directory on disk, including failed (meta-only) calls."""
+        nums = [int(p.name.split("-")[1]) for p in self.transcript.glob("call-*")
+                if p.is_dir() and p.name.split("-")[1].isdigit()]
+        return max(nums, default=0)
 
     def _recorded_calls(self) -> list[tuple[Path, dict]]:
         """Recorded calls in transcript order, with the file each came from."""
@@ -410,7 +422,8 @@ class Loop:
 
     def _call(self, user: str, tag: str, backend=None,
               iteration: int | None = None) -> llm.LLMResponse:
-        n = self.budget.calls + 1
+        self._call_seq += 1
+        n = self._call_seq
         d = self.transcript / f"call-{n}"
         d.mkdir(parents=True, exist_ok=True)
         (d / "system.md").write_text(self.system, encoding="utf-8")

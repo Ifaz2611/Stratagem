@@ -1,6 +1,6 @@
-# XML grammar and mxml adaptations
+# XML Grammar and mxml Adaptations
 
-This file records the grammar source and the differences I tested against mxml.
+This document records the ANTLR XML grammar source used by Stratagem and documents the differences between the formal grammar and the actual behavior of the Mini-XML (mxml) parser. Understanding these adaptations is critical for writing effective fuzzing strategies.
 
 ## Source
 

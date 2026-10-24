@@ -1,6 +1,6 @@
 # TODO: Future Expansion
 
-This document outlines potential improvements and new features for the agent-based fuzzing framework.
+This document outlines potential improvements and new features for Stratagem, the agentic grammar fuzzer.
 
 ## High Priority
 

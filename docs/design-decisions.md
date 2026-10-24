@@ -1,6 +1,6 @@
-# Stratagem — design decisions
+# Stratagem — Design Decisions
 
-This file records the main engineering choices behind the project.
+This file records the main engineering choices behind the Stratagem agentic fuzzing framework. These decisions were made during development of the Mini-XML fuzzing campaign and represent the design rationale for the current implementation. Each decision is labeled (D1, D2, etc.) for easy reference.
 
 ## D1. Target: mxml v4.0.4
 
@@ -52,9 +52,11 @@ results without mixing them with fatal memory errors.
 
 ## D5. Acceptance uses a range
 
-The target acceptance range is roughly 40% to 70%. Very low acceptance means
-most inputs stop near the parser entrance. Very high acceptance leaves little
-exercise of error handling.
+The prompt targets an acceptance range of roughly 40% to 70%. Very low
+acceptance means most inputs stop near the parser entrance. Very high acceptance
+leaves little exercise of error handling. The hard validation gate is
+deliberately wider (10% to 95%): it rejects only strategies that clearly fail
+one way or the other, and leaves borderline cases to refinement.
 
 The summary also reports acceptance by input class. A single overall percentage
 can hide a missing class. For example, a strategy may have reasonable total

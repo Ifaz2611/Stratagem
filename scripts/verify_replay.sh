@@ -7,9 +7,9 @@
 #      whole ordered corpus. Nothing is regenerated, so this is insensitive to
 #      changes in the generator, in Hypothesis, or in the measurement code.
 #
-#   2. GENERATORS. Replaying the recorded LLM transcript must produce
-#      byte-identical strategy.py for every iteration, which is what shows the
-#      transcript is a faithful record of the loop's output.
+#   2. GENERATORS. Replaying the recorded LLM transcript must produce a
+#      byte-identical strategy.py for every completed iteration, which is what
+#      shows the transcript is a faithful record of the loop's output.
 #
 # Usage: ./scripts/verify_replay.sh <run-id>
 set -uo pipefail
@@ -36,10 +36,8 @@ echo "[replay] === 1/2  inputs: replaying each recorded corpus through the harne
 "$PY" - "$SRC" "$ROOT" <<'PYEOF'
 import sys
 from pathlib import Path
-# The heredoc is run as `python -`, so __file__ is unavailable and the current
-# directory is wherever the caller happened to be. Import from the repo root
-# explicitly, otherwise `from fuzzer import corpus` only works when the script
-# is invoked from there.
+# The heredoc is run as `python -`, so __file__ is unavailable. Import from the
+# repo root explicitly rather than relying on the caller's working directory.
 sys.path.insert(0, sys.argv[2])
 from fuzzer import corpus
 
@@ -68,21 +66,37 @@ echo "[replay] === 2/2  generators: replaying the transcript ==="
 if [ ! -d "$SRC/transcript" ]; then
   echo "  skip: no transcript"
 else
-  n_iters=$(find "$SRC/iterations" -mindepth 1 -maxdepth 1 -type d -name 'iter-*' | wc -l)
-  REPLAY_ID="${RUN}-replay"
-  rm -rf "$ROOT/runs/$REPLAY_ID"; mkdir -p "$ROOT/runs/$REPLAY_ID"
-  cp -r "$SRC/transcript" "$ROOT/runs/$REPLAY_ID/transcript"
-  LLM_BACKEND=replay "$PY" -m agent.loop --backend replay --run-id "$REPLAY_ID" \
-      -n 1 -i "$n_iters" >/dev/null 2>&1
+  # Only completed iterations have a strategy the run actually measured. A
+  # resumed run can leave a strategy.py behind from an interrupted attempt; it
+  # is not part of the recorded result and may not be the last call in the
+  # transcript, so it is skipped rather than compared.
+  n_iters=0
   for d in "$SRC"/iterations/iter-*; do
-    it="$(basename "$d")"
-    b="$ROOT/runs/$REPLAY_ID/iterations/$it/strategy.py"
-    if [ -f "$b" ] && cmp -s "$d/strategy.py" "$b"; then
-      echo "  ok       $it strategy.py byte-identical"
-    else
-      echo "  FAIL     $it strategy.py differs or missing"; fail=1
-    fi
+    [ -f "$d/summary.json" ] || continue
+    n="$(basename "$d" | sed 's/^iter-//')"
+    [ "$n" -ge "$n_iters" ] && n_iters=$((n + 1))
   done
+  if [ "$n_iters" -eq 0 ]; then
+    echo "  skip: no completed iterations"
+  else
+    REPLAY_ID="${RUN}-replay"
+    rm -rf "$ROOT/runs/$REPLAY_ID"; mkdir -p "$ROOT/runs/$REPLAY_ID"
+    cp -r "$SRC/transcript" "$ROOT/runs/$REPLAY_ID/transcript"
+    LLM_BACKEND=replay "$PY" -m agent.loop --backend replay --run-id "$REPLAY_ID" \
+        -n 1 -i "$n_iters" >/dev/null 2>&1
+    for d in "$SRC"/iterations/iter-*; do
+      it="$(basename "$d")"
+      if [ ! -f "$d/summary.json" ]; then
+        echo "  skip     $it: incomplete iteration"; continue
+      fi
+      b="$ROOT/runs/$REPLAY_ID/iterations/$it/strategy.py"
+      if [ -f "$b" ] && cmp -s "$d/strategy.py" "$b"; then
+        echo "  ok       $it strategy.py byte-identical"
+      else
+        echo "  FAIL     $it strategy.py differs or missing"; fail=1
+      fi
+    done
+  fi
 fi
 
 echo
