@@ -104,9 +104,14 @@ See `docs/findings.md` for detailed analysis.
 
 ### Prerequisites
 
-- Docker (for containerized builds)
+- Docker (for containerized builds, recommended)
 - Python 3.10+ with virtual environment
+- C compiler (gcc or clang) and make (for harness build)
 - For LLM backends: Claude Code CLI or OpenAI API key
+
+**Platform Notes:**
+- **Linux/macOS**: Fully supported
+- **Windows**: Use WSL2 or Docker for best results. Native Windows requires MinGW-w64 and make.
 
 ### Quick Start with Docker
 

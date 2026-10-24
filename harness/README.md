@@ -227,8 +227,14 @@ These are useful for manual testing and debugging.
 
 - Mini-XML source code (fetched by `scripts/fetch_target.sh`)
 - GCC or Clang compiler
+- make build system
 - libasan, libubsan (part of compiler runtime)
 - For coverage build: gcov/lcov
+
+**Platform Support:**
+- **Linux**: Fully supported with gcc/make
+- **macOS**: Fully supported with clang/make
+- **Windows**: Requires WSL2 or MinGW-w64 with make. The harness build is primarily tested on Unix-like systems.
 
 ## See Also
 

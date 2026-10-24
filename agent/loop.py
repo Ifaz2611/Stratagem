@@ -767,12 +767,12 @@ class Loop:
             f"{BASELINE['depth']} | {BASELINE['templates']} | 0 | $0 |",
         ]
         for r in rows:
+            cost_str = (f"${r['cost_usd_cumulative']:.2f} |"
+                        if r.get("cost_usd_cumulative") is not None else "n/a |")
             lines.append(
                 f"| {r['iteration']} | {r['acceptance_rate']:.1%} | "
                 f"{r['productions_hit']}/{r['productions_total']} | {r['max_depth']} | "
-                f"{r['distinct_diagnostic_templates']} | {r['crash_count']} | "
-                + (f"${r['cost_usd_cumulative']:.2f} |"
-                   if r.get("cost_usd_cumulative") is not None else "n/a |"))
+                f"{r['distinct_diagnostic_templates']} | {r['crash_count']} | {cost_str}")
         b = final["budget"]
         lines += ["", "## Budget", "",
                   f"- LLM calls: **{b['llm_calls']}**",

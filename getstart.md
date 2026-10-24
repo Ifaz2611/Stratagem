@@ -101,6 +101,14 @@ sudo apt-get update
 sudo apt-get install -y build-essential git python3 python3-venv
 ```
 
+**Windows with MinGW:**
+```bash
+# Install MinGW-w64 and make
+# Ensure gcc and make are in your PATH
+```
+
+**Note:** The C harness build requires `make` and a C compiler (gcc or clang). On Windows, use WSL2 or install MinGW-w64. The project is primarily tested on Linux and macOS.
+
 #### Step 2: Create Python Virtual Environment
 
 ```bash
