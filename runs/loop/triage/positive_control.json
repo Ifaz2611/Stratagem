@@ -1,0 +1,28 @@
+{
+  "found": true,
+  "document": "<!DOCTYPE a SYSTEM \"\"><a/>",
+  "document_len": 26,
+  "outcome": "crash",
+  "signature": "d8ee1ccd656a",
+  "label": "heap-buffer-overflow READ index_sort@mxml-index.c",
+  "examples_before_shrink": 15,
+  "verified_runs": 5,
+  "verified_ok": 5,
+  "deterministic": true,
+  "report": {
+    "signature": "d8ee1ccd656a",
+    "label": "heap-buffer-overflow READ index_sort@mxml-index.c",
+    "tool": "AddressSanitizer",
+    "bug_type": "heap-buffer-overflow",
+    "access": "READ",
+    "frames": [
+      "index_sort@mxml-index.c",
+      "mxmlIndexNew@mxml-index.c"
+    ],
+    "all_frames": [
+      "index_sort@mxml-index.c",
+      "index_sort@mxml-index.c",
+      "mxmlIndexNew@mxml-index.c"
+    ]
+  }
+}

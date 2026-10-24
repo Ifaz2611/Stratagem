@@ -1,0 +1,145 @@
+{
+  "strategy": "gen_iter0",
+  "mode": "survey",
+  "random_seed": null,
+  "examples": 500,
+  "wall_clock_s": 9.43,
+  "outcomes": {
+    "parsed_clean": 223,
+    "rejected": 264,
+    "parsed_diag": 13
+  },
+  "acceptance_rate": 0.472,
+  "buckets": {
+    "well_formed": {
+      "n": 278,
+      "accepted": 142,
+      "share": 0.556,
+      "acceptance_rate": 0.511
+    },
+    "near_miss": {
+      "n": 89,
+      "accepted": 33,
+      "share": 0.178,
+      "acceptance_rate": 0.371
+    },
+    "byte_hostile": {
+      "n": 133,
+      "accepted": 61,
+      "share": 0.266,
+      "acceptance_rate": 0.459
+    }
+  },
+  "crash_count": 0,
+  "unique_crash_inputs": 0,
+  "xml_shaped_rate": 0.92,
+  "diagnostic_templates": {
+    "Duplicate attribute '%s' in element %s on line %d.": 49,
+    "Early EOF in comment node on line %d.": 39,
+    "XML does not start with '%s' (saw '%s').": 39,
+    "Entity '%s' not supported under parent <%s> on line %d.": 37,
+    "Bad control character 0x%x under parent <%s> on line %d not allowed by XML standard.": 34,
+    "Mismatched close tag </%s> under parent <%s> on line %d.": 17,
+    "Missing value for attribute '%s' in element %s on line %d.": 15,
+    "Bad control character 0x%x not allowed by XML standard.": 13,
+    "<%s--> cannot be a second root node after <%s> on line %d.": 11,
+    "<%s> cannot be a second root node after <%s> on line %d.": 7,
+    "<%s?> cannot be a second root node after <%s> on line %d.": 6,
+    "Early EOF in CDATA node on line %d.": 5,
+    "Early EOF in processing instruction node on line %d.": 5
+  },
+  "distinct_diagnostic_templates": 13,
+  "input_len": {
+    "min": 4,
+    "max": 419,
+    "mean": 103.3,
+    "median": 87.0
+  },
+  "duration_ms": {
+    "mean": 7.9,
+    "max": 11.47
+  },
+  "structure": {
+    "productions_hit": 26,
+    "productions_total": 27,
+    "boundaries": {
+      "name_len": {
+        "max": 8,
+        "p50": 4,
+        "p90": 7,
+        "distinct": 9
+      },
+      "attrs_per_element": {
+        "max": 4,
+        "p50": 2,
+        "p90": 4,
+        "distinct": 5
+      },
+      "entity_name_len": {
+        "max": 14,
+        "p50": 4,
+        "p90": 10,
+        "distinct": 12
+      },
+      "attr_value_len": {
+        "max": 3,
+        "p50": 3,
+        "p90": 3,
+        "distinct": 2
+      },
+      "depth": {
+        "max": 4,
+        "p50": 1,
+        "p90": 2,
+        "distinct": 5
+      }
+    },
+    "hit": {
+      "g_prolog": 312,
+      "g_element_paired": 418,
+      "g_element_selfclose": 119,
+      "g_attribute_dquot": 412,
+      "g_attribute_squot": 272,
+      "g_chardata": 282,
+      "g_entity_named": 223,
+      "g_charref_dec": 200,
+      "g_charref_hex": 240,
+      "g_cdata": 58,
+      "g_comment": 193,
+      "g_pi": 151,
+      "x_attribute_unquoted": 148,
+      "x_doctype": 44,
+      "x_empty_elem_name": 15,
+      "x_rootless": 26,
+      "x_name_nonascii": 130,
+      "x_mismatched_tags": 14,
+      "x_entity_unsupported": 16,
+      "x_multiple_roots": 28,
+      "x_control_char": 29,
+      "x_unterminated": 10,
+      "x_bom": 9,
+      "x_invalid_utf8": 85,
+      "x_embedded_nul": 15,
+      "x_encoding_decl": 143
+    },
+    "missing": [
+      "g_nesting_deep"
+    ],
+    "depth_histogram": {
+      "0": 82,
+      "1": 286,
+      "2-3": 126,
+      "4-7": 6
+    },
+    "max_depth_seen": 4
+  },
+  "crash_groups": {},
+  "shrunk_failure": null,
+  "corpus": {
+    "file": "corpus.jsonl.gz",
+    "count": 500,
+    "raw_bytes": 51659,
+    "stored_bytes": 20760,
+    "corpus_digest": "a28ea22b535c0a06"
+  }
+}

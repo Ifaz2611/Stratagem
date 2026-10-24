@@ -1,0 +1,24 @@
+# Secrets are injected at run time via --env-file, never copied into the
+# image, where they would persist in a layer for anyone who pulls it.
+.env
+.env.local
+
+# The image builds its own venv at /opt/venv. Copying the host one in would
+# add ~150 MB of dead weight and, worse, ship host-specific paths into a
+# supposedly reproducible image.
+.venv/
+
+.git/
+__pycache__/
+*.pyc
+
+# Fetched inside the image by scripts/fetch_target.sh at the verified SHA.
+# Copying the host copy in would let a locally-modified target sneak into a
+# build that claims to be pinned.
+third_party/
+
+build/
+.hypothesis/
+
+# Mounted at run time by run.sh, not baked in.
+runs/

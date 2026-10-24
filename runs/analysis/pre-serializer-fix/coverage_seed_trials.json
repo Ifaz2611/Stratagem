@@ -1,0 +1,101 @@
+[
+  {
+    "cell": "loop-c/iter-0",
+    "seed": 11,
+    "parser_pct": 39.74,
+    "accept": 0.198,
+    "prod": 26,
+    "diag": 14,
+    "crashes": 0,
+    "well_formed": 0.376,
+    "byte_hostile": 0.19
+  },
+  {
+    "cell": "loop-c/iter-0",
+    "seed": 22,
+    "parser_pct": 40.1,
+    "accept": 0.23,
+    "prod": 26,
+    "diag": 15,
+    "crashes": 0,
+    "well_formed": 0.31,
+    "byte_hostile": 0.256
+  },
+  {
+    "cell": "loop-c/iter-0",
+    "seed": 33,
+    "parser_pct": 39.62,
+    "accept": 0.26,
+    "prod": 26,
+    "diag": 14,
+    "crashes": 0,
+    "well_formed": 0.256,
+    "byte_hostile": 0.368
+  },
+  {
+    "cell": "loop-d/iter-0",
+    "seed": 11,
+    "parser_pct": 36.97,
+    "accept": 0.328,
+    "prod": 27,
+    "diag": 11,
+    "crashes": 0,
+    "well_formed": 0.218,
+    "byte_hostile": 0.542
+  },
+  {
+    "cell": "loop-d/iter-0",
+    "seed": 22,
+    "parser_pct": 37.45,
+    "accept": 0.372,
+    "prod": 27,
+    "diag": 12,
+    "crashes": 0,
+    "well_formed": 0.22,
+    "byte_hostile": 0.566
+  },
+  {
+    "cell": "loop-d/iter-0",
+    "seed": 33,
+    "parser_pct": 37.21,
+    "accept": 0.312,
+    "prod": 26,
+    "diag": 13,
+    "crashes": 0,
+    "well_formed": 0.224,
+    "byte_hostile": 0.566
+  },
+  {
+    "cell": "loop-e/iter-0",
+    "seed": 11,
+    "parser_pct": 39.74,
+    "accept": 0.59,
+    "prod": 26,
+    "diag": 10,
+    "crashes": 0,
+    "well_formed": 0.432,
+    "byte_hostile": 0.422
+  },
+  {
+    "cell": "loop-e/iter-0",
+    "seed": 22,
+    "parser_pct": 39.14,
+    "accept": 0.544,
+    "prod": 26,
+    "diag": 11,
+    "crashes": 0,
+    "well_formed": 0.484,
+    "byte_hostile": 0.38
+  },
+  {
+    "cell": "loop-e/iter-0",
+    "seed": 33,
+    "parser_pct": 39.62,
+    "accept": 0.564,
+    "prod": 27,
+    "diag": 14,
+    "crashes": 0,
+    "well_formed": 0.492,
+    "byte_hostile": 0.346
+  }
+]

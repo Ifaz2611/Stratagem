@@ -1,0 +1,392 @@
+[
+  {
+    "run": "baseline",
+    "documents": 500,
+    "parser_pct": 13.81,
+    "parser_lines_covered": 115,
+    "parser_lines_total": 833,
+    "all_pct": 10.71,
+    "all_lines_covered": 189,
+    "acceptance_rate": 0.002,
+    "productions_hit": 6,
+    "distinct_diagnostics": 6,
+    "max_depth": 0,
+    "per_file": {
+      "mxml-file.c": {
+        "pct": 13.81,
+        "lines": 833,
+        "covered": 115
+      },
+      "mxml-node.c": {
+        "pct": 10.71,
+        "lines": 252,
+        "covered": 27
+      },
+      "mxml-attr.c": {
+        "pct": 0.0,
+        "lines": 65,
+        "covered": 0
+      },
+      "mxml-options.c": {
+        "pct": 25.0,
+        "lines": 92,
+        "covered": 23
+      },
+      "mxml-private.c": {
+        "pct": 64.86,
+        "lines": 37,
+        "covered": 24
+      },
+      "mxml-get.c": {
+        "pct": 0.0,
+        "lines": 86,
+        "covered": 0
+      },
+      "mxml-set.c": {
+        "pct": 0.0,
+        "lines": 222,
+        "covered": 0
+      },
+      "mxml-search.c": {
+        "pct": 0.0,
+        "lines": 68,
+        "covered": 0
+      },
+      "mxml-index.c": {
+        "pct": 0.0,
+        "lines": 110,
+        "covered": 0
+      },
+      "_total": {
+        "covered": 189,
+        "lines": 1765,
+        "pct": 10.71
+      }
+    }
+  },
+  {
+    "run": "iter-0",
+    "documents": 500,
+    "parser_pct": 39.26,
+    "parser_lines_covered": 327,
+    "parser_lines_total": 833,
+    "all_pct": 28.78,
+    "all_lines_covered": 508,
+    "acceptance_rate": 0.316,
+    "productions_hit": 23,
+    "distinct_diagnostics": 16,
+    "max_depth": 40,
+    "per_file": {
+      "mxml-file.c": {
+        "pct": 39.26,
+        "lines": 833,
+        "covered": 327
+      },
+      "mxml-node.c": {
+        "pct": 37.7,
+        "lines": 252,
+        "covered": 95
+      },
+      "mxml-attr.c": {
+        "pct": 33.85,
+        "lines": 65,
+        "covered": 22
+      },
+      "mxml-options.c": {
+        "pct": 40.22,
+        "lines": 92,
+        "covered": 37
+      },
+      "mxml-private.c": {
+        "pct": 64.86,
+        "lines": 37,
+        "covered": 24
+      },
+      "mxml-get.c": {
+        "pct": 3.49,
+        "lines": 86,
+        "covered": 3
+      },
+      "mxml-set.c": {
+        "pct": 0.0,
+        "lines": 222,
+        "covered": 0
+      },
+      "mxml-search.c": {
+        "pct": 0.0,
+        "lines": 68,
+        "covered": 0
+      },
+      "mxml-index.c": {
+        "pct": 0.0,
+        "lines": 110,
+        "covered": 0
+      },
+      "_total": {
+        "covered": 508,
+        "lines": 1765,
+        "pct": 28.78
+      }
+    }
+  },
+  {
+    "run": "iter-1",
+    "documents": 500,
+    "parser_pct": 40.1,
+    "parser_lines_covered": 334,
+    "parser_lines_total": 833,
+    "all_pct": 29.18,
+    "all_lines_covered": 515,
+    "acceptance_rate": 0.332,
+    "productions_hit": 22,
+    "distinct_diagnostics": 16,
+    "max_depth": 5,
+    "per_file": {
+      "mxml-file.c": {
+        "pct": 40.1,
+        "lines": 833,
+        "covered": 334
+      },
+      "mxml-node.c": {
+        "pct": 37.7,
+        "lines": 252,
+        "covered": 95
+      },
+      "mxml-attr.c": {
+        "pct": 33.85,
+        "lines": 65,
+        "covered": 22
+      },
+      "mxml-options.c": {
+        "pct": 40.22,
+        "lines": 92,
+        "covered": 37
+      },
+      "mxml-private.c": {
+        "pct": 64.86,
+        "lines": 37,
+        "covered": 24
+      },
+      "mxml-get.c": {
+        "pct": 3.49,
+        "lines": 86,
+        "covered": 3
+      },
+      "mxml-set.c": {
+        "pct": 0.0,
+        "lines": 222,
+        "covered": 0
+      },
+      "mxml-search.c": {
+        "pct": 0.0,
+        "lines": 68,
+        "covered": 0
+      },
+      "mxml-index.c": {
+        "pct": 0.0,
+        "lines": 110,
+        "covered": 0
+      },
+      "_total": {
+        "covered": 515,
+        "lines": 1765,
+        "pct": 29.18
+      }
+    }
+  },
+  {
+    "run": "iter-2",
+    "documents": 500,
+    "parser_pct": 39.98,
+    "parser_lines_covered": 333,
+    "parser_lines_total": 833,
+    "all_pct": 29.18,
+    "all_lines_covered": 515,
+    "acceptance_rate": 0.406,
+    "productions_hit": 22,
+    "distinct_diagnostics": 15,
+    "max_depth": 87,
+    "per_file": {
+      "mxml-file.c": {
+        "pct": 39.98,
+        "lines": 833,
+        "covered": 333
+      },
+      "mxml-node.c": {
+        "pct": 37.7,
+        "lines": 252,
+        "covered": 95
+      },
+      "mxml-attr.c": {
+        "pct": 33.85,
+        "lines": 65,
+        "covered": 22
+      },
+      "mxml-options.c": {
+        "pct": 41.3,
+        "lines": 92,
+        "covered": 38
+      },
+      "mxml-private.c": {
+        "pct": 64.86,
+        "lines": 37,
+        "covered": 24
+      },
+      "mxml-get.c": {
+        "pct": 3.49,
+        "lines": 86,
+        "covered": 3
+      },
+      "mxml-set.c": {
+        "pct": 0.0,
+        "lines": 222,
+        "covered": 0
+      },
+      "mxml-search.c": {
+        "pct": 0.0,
+        "lines": 68,
+        "covered": 0
+      },
+      "mxml-index.c": {
+        "pct": 0.0,
+        "lines": 110,
+        "covered": 0
+      },
+      "_total": {
+        "covered": 515,
+        "lines": 1765,
+        "pct": 29.18
+      }
+    }
+  },
+  {
+    "run": "iter-3",
+    "documents": 500,
+    "parser_pct": 39.14,
+    "parser_lines_covered": 326,
+    "parser_lines_total": 833,
+    "all_pct": 28.9,
+    "all_lines_covered": 510,
+    "acceptance_rate": 0.504,
+    "productions_hit": 22,
+    "distinct_diagnostics": 13,
+    "max_depth": 144,
+    "per_file": {
+      "mxml-file.c": {
+        "pct": 39.14,
+        "lines": 833,
+        "covered": 326
+      },
+      "mxml-node.c": {
+        "pct": 37.7,
+        "lines": 252,
+        "covered": 95
+      },
+      "mxml-attr.c": {
+        "pct": 33.85,
+        "lines": 65,
+        "covered": 22
+      },
+      "mxml-options.c": {
+        "pct": 43.48,
+        "lines": 92,
+        "covered": 40
+      },
+      "mxml-private.c": {
+        "pct": 64.86,
+        "lines": 37,
+        "covered": 24
+      },
+      "mxml-get.c": {
+        "pct": 3.49,
+        "lines": 86,
+        "covered": 3
+      },
+      "mxml-set.c": {
+        "pct": 0.0,
+        "lines": 222,
+        "covered": 0
+      },
+      "mxml-search.c": {
+        "pct": 0.0,
+        "lines": 68,
+        "covered": 0
+      },
+      "mxml-index.c": {
+        "pct": 0.0,
+        "lines": 110,
+        "covered": 0
+      },
+      "_total": {
+        "covered": 510,
+        "lines": 1765,
+        "pct": 28.9
+      }
+    }
+  },
+  {
+    "run": "iter-4",
+    "documents": 500,
+    "parser_pct": 39.86,
+    "parser_lines_covered": 332,
+    "parser_lines_total": 833,
+    "all_pct": 29.18,
+    "all_lines_covered": 515,
+    "acceptance_rate": 0.472,
+    "productions_hit": 23,
+    "distinct_diagnostics": 13,
+    "max_depth": 107,
+    "per_file": {
+      "mxml-file.c": {
+        "pct": 39.86,
+        "lines": 833,
+        "covered": 332
+      },
+      "mxml-node.c": {
+        "pct": 37.7,
+        "lines": 252,
+        "covered": 95
+      },
+      "mxml-attr.c": {
+        "pct": 33.85,
+        "lines": 65,
+        "covered": 22
+      },
+      "mxml-options.c": {
+        "pct": 42.39,
+        "lines": 92,
+        "covered": 39
+      },
+      "mxml-private.c": {
+        "pct": 64.86,
+        "lines": 37,
+        "covered": 24
+      },
+      "mxml-get.c": {
+        "pct": 3.49,
+        "lines": 86,
+        "covered": 3
+      },
+      "mxml-set.c": {
+        "pct": 0.0,
+        "lines": 222,
+        "covered": 0
+      },
+      "mxml-search.c": {
+        "pct": 0.0,
+        "lines": 68,
+        "covered": 0
+      },
+      "mxml-index.c": {
+        "pct": 0.0,
+        "lines": 110,
+        "covered": 0
+      },
+      "_total": {
+        "covered": 515,
+        "lines": 1765,
+        "pct": 29.18
+      }
+    }
+  }
+]

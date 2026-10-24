@@ -1,0 +1,53 @@
+[
+  {
+    "cell": "baseline/baseline",
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "trials": [
+      {
+        "seed": 11,
+        "parser_pct": 14.41,
+        "parser_lines_covered": 120,
+        "acceptance": 0.004,
+        "diagnostics": 3,
+        "productions": 7,
+        "crashes": 0,
+        "well_formed": 0.006,
+        "near_miss": 0.668,
+        "byte_hostile": 0.326
+      },
+      {
+        "seed": 22,
+        "parser_pct": 8.04,
+        "parser_lines_covered": 67,
+        "acceptance": 0.0,
+        "diagnostics": 3,
+        "productions": 4,
+        "crashes": 0,
+        "well_formed": 0.008,
+        "near_miss": 0.644,
+        "byte_hostile": 0.348
+      },
+      {
+        "seed": 33,
+        "parser_pct": 17.17,
+        "parser_lines_covered": 143,
+        "acceptance": 0.002,
+        "diagnostics": 4,
+        "productions": 4,
+        "crashes": 0,
+        "well_formed": 0.006,
+        "near_miss": 0.646,
+        "byte_hostile": 0.348
+      }
+    ],
+    "parser_pct_mean": 13.21,
+    "parser_pct_stdev": 4.68,
+    "parser_pct_min": 8.04,
+    "parser_pct_max": 17.17,
+    "crashes": 0
+  }
+]

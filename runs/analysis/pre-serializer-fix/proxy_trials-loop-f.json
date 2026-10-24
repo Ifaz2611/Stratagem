@@ -1,0 +1,307 @@
+{
+  "run": "loop-f",
+  "seeds": [
+    11,
+    22,
+    33
+  ],
+  "iterations": [
+    {
+      "iteration": "iter-0",
+      "seeds": [
+        11,
+        22,
+        33
+      ],
+      "coverage": 39.5,
+      "acceptance": {
+        "trials": [
+          44.2,
+          46.0,
+          32.6
+        ],
+        "mean": 40.93,
+        "stdev": 7.27
+      },
+      "diagnostics": {
+        "trials": [
+          13,
+          11,
+          14
+        ],
+        "mean": 12.67,
+        "stdev": 1.53
+      },
+      "productions": {
+        "trials": [
+          26,
+          26,
+          26
+        ],
+        "mean": 26,
+        "stdev": 0.0
+      },
+      "max_depth": {
+        "trials": [
+          3500,
+          3500,
+          3500
+        ],
+        "mean": 3500,
+        "stdev": 0.0
+      },
+      "well_formed": {
+        "trials": [
+          45.8,
+          54.0,
+          49.0
+        ],
+        "mean": 49.6,
+        "stdev": 4.13
+      },
+      "near_miss": {
+        "trials": [
+          14.2,
+          11.6,
+          22.4
+        ],
+        "mean": 16.07,
+        "stdev": 5.64
+      },
+      "byte_hostile": {
+        "trials": [
+          40.0,
+          34.4,
+          28.6
+        ],
+        "mean": 34.33,
+        "stdev": 5.7
+      }
+    },
+    {
+      "iteration": "iter-1",
+      "seeds": [
+        11,
+        22,
+        33
+      ],
+      "coverage": 37.21,
+      "acceptance": {
+        "trials": [
+          51.0,
+          49.6,
+          53.8
+        ],
+        "mean": 51.47,
+        "stdev": 2.14
+      },
+      "diagnostics": {
+        "trials": [
+          13,
+          14,
+          14
+        ],
+        "mean": 13.67,
+        "stdev": 0.58
+      },
+      "productions": {
+        "trials": [
+          26,
+          26,
+          25
+        ],
+        "mean": 25.67,
+        "stdev": 0.58
+      },
+      "max_depth": {
+        "trials": [
+          3700,
+          4500,
+          5000
+        ],
+        "mean": 4400,
+        "stdev": 655.74
+      },
+      "well_formed": {
+        "trials": [
+          49.8,
+          54.2,
+          51.0
+        ],
+        "mean": 51.67,
+        "stdev": 2.27
+      },
+      "near_miss": {
+        "trials": [
+          18.8,
+          13.4,
+          13.6
+        ],
+        "mean": 15.27,
+        "stdev": 3.06
+      },
+      "byte_hostile": {
+        "trials": [
+          31.4,
+          32.4,
+          35.4
+        ],
+        "mean": 33.07,
+        "stdev": 2.08
+      }
+    },
+    {
+      "iteration": "iter-2",
+      "seeds": [
+        11,
+        22,
+        33
+      ],
+      "coverage": 39.98,
+      "acceptance": {
+        "trials": [
+          42.2,
+          47.4,
+          42.0
+        ],
+        "mean": 43.87,
+        "stdev": 3.06
+      },
+      "diagnostics": {
+        "trials": [
+          13,
+          17,
+          16
+        ],
+        "mean": 15.33,
+        "stdev": 2.08
+      },
+      "productions": {
+        "trials": [
+          25,
+          27,
+          25
+        ],
+        "mean": 25.67,
+        "stdev": 1.15
+      },
+      "max_depth": {
+        "trials": [
+          8000,
+          17000,
+          17000
+        ],
+        "mean": 14000,
+        "stdev": 5196.15
+      },
+      "well_formed": {
+        "trials": [
+          36.2,
+          52.6,
+          35.4
+        ],
+        "mean": 41.4,
+        "stdev": 9.71
+      },
+      "near_miss": {
+        "trials": [
+          18.4,
+          16.6,
+          18.8
+        ],
+        "mean": 17.93,
+        "stdev": 1.17
+      },
+      "byte_hostile": {
+        "trials": [
+          45.4,
+          30.8,
+          45.8
+        ],
+        "mean": 40.67,
+        "stdev": 8.55
+      }
+    },
+    {
+      "iteration": "iter-3",
+      "seeds": [
+        11,
+        22,
+        33
+      ],
+      "coverage": 39.5,
+      "acceptance": {
+        "trials": [
+          54.4,
+          53.8,
+          56.4
+        ],
+        "mean": 54.87,
+        "stdev": 1.36
+      },
+      "diagnostics": {
+        "trials": [
+          17,
+          15,
+          15
+        ],
+        "mean": 15.67,
+        "stdev": 1.15
+      },
+      "productions": {
+        "trials": [
+          26,
+          25,
+          25
+        ],
+        "mean": 25.33,
+        "stdev": 0.58
+      },
+      "max_depth": {
+        "trials": [
+          19000,
+          21000,
+          17000
+        ],
+        "mean": 19000,
+        "stdev": 2000.0
+      },
+      "well_formed": {
+        "trials": [
+          56.6,
+          61.0,
+          57.4
+        ],
+        "mean": 58.33,
+        "stdev": 2.34
+      },
+      "near_miss": {
+        "trials": [
+          22.0,
+          19.2,
+          18.8
+        ],
+        "mean": 20.0,
+        "stdev": 1.74
+      },
+      "byte_hostile": {
+        "trials": [
+          21.4,
+          19.8,
+          23.8
+        ],
+        "mean": 21.67,
+        "stdev": 2.01
+      }
+    }
+  ],
+  "correlation_with_coverage": {
+    "acceptance": -0.426,
+    "diagnostics": 0.379,
+    "productions": -0.004,
+    "max_depth": 0.538,
+    "well_formed": -0.288,
+    "near_miss": 0.633,
+    "byte_hostile": 0.085
+  }
+}

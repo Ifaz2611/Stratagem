@@ -1,0 +1,50 @@
+{
+  "per_run": {
+    "ablation-v2-sonnet": {
+      "documents": 500,
+      "leaking": 16,
+      "rate": 0.032
+    },
+    "baseline": {
+      "documents": 500,
+      "leaking": 0,
+      "rate": 0.0
+    },
+    "loop": {
+      "documents": 2500,
+      "leaking": 458,
+      "rate": 0.1832
+    },
+    "loop-b": {
+      "documents": 1000,
+      "leaking": 19,
+      "rate": 0.019
+    },
+    "loop-c": {
+      "documents": 2500,
+      "leaking": 171,
+      "rate": 0.0684
+    },
+    "loop-d": {
+      "documents": 500,
+      "leaking": 43,
+      "rate": 0.086
+    },
+    "loop-e": {
+      "documents": 500,
+      "leaking": 41,
+      "rate": 0.082
+    },
+    "loop-f": {
+      "documents": 2000,
+      "leaking": 72,
+      "rate": 0.036
+    }
+  },
+  "total_documents": 10000,
+  "leaking_documents": 820,
+  "rate": 0.082,
+  "signatures": {
+    "mxml_new@mxml-node.c|mxmlNewElement@mxml-node.c|mxml_load_data@mxml-file.c": 820
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "run_id": "ablation-v2-sonnet",
+  "backend": "cli",
+  "model": "(backend default)",
+  "prompt_set": "v2",
+  "seed_model": "sonnet",
+  "refine_model": "sonnet",
+  "max_examples": 500,
+  "iterations": [
+    {
+      "iteration": 0,
+      "strategy": "gen_iter0",
+      "acceptance_rate": 0.472,
+      "productions_hit": 26,
+      "productions_total": 27,
+      "productions_missing": [
+        "g_nesting_deep"
+      ],
+      "max_depth": 4,
+      "distinct_diagnostic_templates": 13,
+      "crash_count": 0,
+      "crash_groups": [],
+      "cost_usd_cumulative": 0.4389
+    }
+  ],
+  "budget": {
+    "llm_calls": 1,
+    "input_tokens": 2,
+    "output_tokens": 36078,
+    "billable_input_tokens": 18625,
+    "authored_prompt_chars": 10276,
+    "authored_prompt_tokens_est": 2569,
+    "cost_usd": 0.4389,
+    "max_usd": 0.6
+  },
+  "stopped_early": null,
+  "resumed_from": null
+}

@@ -1,0 +1,70 @@
+[
+  {
+    "run": "baseline",
+    "parser_pct_trials": [
+      13.69,
+      8.04,
+      17.17
+    ],
+    "mean": 12.97,
+    "stdev": 4.61
+  },
+  {
+    "run": "iter-0",
+    "parser_pct_trials": [
+      39.26,
+      39.26,
+      38.54
+    ],
+    "mean": 39.02,
+    "stdev": 0.42
+  },
+  {
+    "run": "iter-1",
+    "parser_pct_trials": [
+      39.74,
+      39.5,
+      38.78
+    ],
+    "mean": 39.34,
+    "stdev": 0.5
+  },
+  {
+    "run": "iter-2",
+    "parser_pct_trials": [
+      39.26,
+      40.1,
+      40.34
+    ],
+    "mean": 39.9,
+    "stdev": 0.57
+  },
+  {
+    "run": "iter-3",
+    "parser_pct_trials": [
+      39.98,
+      40.34,
+      39.74
+    ],
+    "mean": 40.02,
+    "stdev": 0.3
+  },
+  {
+    "run": "iter-4",
+    "parser_pct_trials": [
+      39.5,
+      39.26,
+      38.9
+    ],
+    "mean": 39.22,
+    "stdev": 0.3
+  },
+  {
+    "run": "union",
+    "parser_pct_trials": [
+      40.94
+    ],
+    "mean": 40.94,
+    "stdev": 0.0
+  }
+]

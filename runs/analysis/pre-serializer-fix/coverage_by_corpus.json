@@ -1,0 +1,1807 @@
+[
+  {
+    "cell": "ablation-v2-sonnet/iter-0",
+    "documents": 500,
+    "parser_pct": 40.34,
+    "parser_lines_covered": 336,
+    "parser_lines_total": 833,
+    "all_pct": 29.46,
+    "acceptance_rate": 0.472,
+    "productions_hit": 26,
+    "distinct_diagnostics": 13,
+    "boundaries": {
+      "name_len": {
+        "max": 8,
+        "p50": 4,
+        "p90": 7,
+        "distinct": 9
+      },
+      "attrs_per_element": {
+        "max": 4,
+        "p50": 2,
+        "p90": 4,
+        "distinct": 5
+      },
+      "entity_name_len": {
+        "max": 14,
+        "p50": 4,
+        "p90": 10,
+        "distinct": 12
+      },
+      "attr_value_len": {
+        "max": 3,
+        "p50": 3,
+        "p90": 3,
+        "distinct": 2
+      },
+      "depth": {
+        "max": 4,
+        "p50": 1,
+        "p90": 2,
+        "distinct": 5
+      }
+    },
+    "per_file": {
+      "mxml-file.c": {
+        "pct": 40.34,
+        "lines": 833,
+        "covered": 336
+      },
+      "mxml-node.c": {
+        "pct": 37.7,
+        "lines": 252,
+        "covered": 95
+      },
+      "mxml-attr.c": {
+        "pct": 33.85,
+        "lines": 65,
+        "covered": 22
+      },
+      "mxml-options.c": {
+        "pct": 43.48,
+        "lines": 92,
+        "covered": 40
+      },
+      "mxml-private.c": {
+        "pct": 64.86,
+        "lines": 37,
+        "covered": 24
+      },
+      "mxml-get.c": {
+        "pct": 3.49,
+        "lines": 86,
+        "covered": 3
+      },
+      "mxml-set.c": {
+        "pct": 0.0,
+        "lines": 222,
+        "covered": 0
+      },
+      "mxml-search.c": {
+        "pct": 0.0,
+        "lines": 68,
+        "covered": 0
+      },
+      "mxml-index.c": {
+        "pct": 0.0,
+        "lines": 110,
+        "covered": 0
+      },
+      "_total": {
+        "covered": 520,
+        "lines": 1765,
+        "pct": 29.46
+      }
+    }
+  },
+  {
+    "cell": "loop-b/iter-0",
+    "documents": 500,
+    "parser_pct": 42.26,
+    "parser_lines_covered": 352,
+    "parser_lines_total": 833,
+    "all_pct": 30.37,
+    "acceptance_rate": 0.448,
+    "productions_hit": 27,
+    "distinct_diagnostics": 13,
+    "boundaries": {
+      "name_len": {
+        "max": 31,
+        "p50": 6,
+        "p90": 8,
+        "distinct": 13
+      },
+      "attrs_per_element": {
+        "max": 5,
+        "p50": 1,
+        "p90": 5,
+        "distinct": 6
+      },
+      "entity_name_len": {
+        "max": 13,
+        "p50": 0,
+        "p90": 6,
+        "distinct": 10
+      },
+      "attr_value_len": {
+        "max": 3,
+        "p50": 3,
+        "p90": 3,
+        "distinct": 2
+      },
+      "depth": {
+        "max": 211,
+        "p50": 3,
+        "p90": 57,
+        "distinct": 55
+      }
+    },
+    "per_file": {
+      "mxml-file.c": {
+        "pct": 42.26,
+        "lines": 833,
+        "covered": 352
+      },
+      "mxml-node.c": {
+        "pct": 37.7,
+        "lines": 252,
+        "covered": 95
+      },
+      "mxml-attr.c": {
+        "pct": 33.85,
+        "lines": 65,
+        "covered": 22
+      },
+      "mxml-options.c": {
+        "pct": 43.48,
+        "lines": 92,
+        "covered": 40
+      },
+      "mxml-private.c": {
+        "pct": 64.86,
+        "lines": 37,
+        "covered": 24
+      },
+      "mxml-get.c": {
+        "pct": 3.49,
+        "lines": 86,
+        "covered": 3
+      },
+      "mxml-set.c": {
+        "pct": 0.0,
+        "lines": 222,
+        "covered": 0
+      },
+      "mxml-search.c": {
+        "pct": 0.0,
+        "lines": 68,
+        "covered": 0
+      },
+      "mxml-index.c": {
+        "pct": 0.0,
+        "lines": 110,
+        "covered": 0
+      },
+      "_total": {
+        "covered": 536,
+        "lines": 1765,
+        "pct": 30.37
+      }
+    }
+  },
+  {
+    "cell": "loop-b/iter-1",
+    "documents": 500,
+    "parser_pct": 41.9,
+    "parser_lines_covered": 349,
+    "parser_lines_total": 833,
+    "all_pct": 30.65,
+    "acceptance_rate": 0.518,
+    "productions_hit": 27,
+    "distinct_diagnostics": 13,
+    "boundaries": {
+      "name_len": {
+        "max": 45,
+        "p50": 4,
+        "p90": 8,
+        "distinct": 15
+      },
+      "attrs_per_element": {
+        "max": 5,
+        "p50": 0,
+        "p90": 4,
+        "distinct": 6
+      },
+      "entity_name_len": {
+        "max": 7,
+        "p50": 0,
+        "p90": 6,
+        "distinct": 8
+      },
+      "attr_value_len": {
+        "max": 3,
+        "p50": 0,
+        "p90": 3,
+        "distinct": 2
+      },
+      "depth": {
+        "max": 669,
+        "p50": 27,
+        "p90": 177,
+        "distinct": 71
+      }
+    },
+    "per_file": {
+      "mxml-file.c": {
+        "pct": 41.9,
+        "lines": 833,
+        "covered": 349
+      },
+      "mxml-node.c": {
+        "pct": 40.48,
+        "lines": 252,
+        "covered": 102
+      },
+      "mxml-attr.c": {
+        "pct": 33.85,
+        "lines": 65,
+        "covered": 22
+      },
+      "mxml-options.c": {
+        "pct": 43.48,
+        "lines": 92,
+        "covered": 40
+      },
+      "mxml-private.c": {
+        "pct": 64.86,
+        "lines": 37,
+        "covered": 24
+      },
+      "mxml-get.c": {
+        "pct": 4.65,
+        "lines": 86,
+        "covered": 4
+      },
+      "mxml-set.c": {
+        "pct": 0.0,
+        "lines": 222,
+        "covered": 0
+      },
+      "mxml-search.c": {
+        "pct": 0.0,
+        "lines": 68,
+        "covered": 0
+      },
+      "mxml-index.c": {
+        "pct": 0.0,
+        "lines": 110,
+        "covered": 0
+      },
+      "_total": {
+        "covered": 541,
+        "lines": 1765,
+        "pct": 30.65
+      }
+    }
+  },
+  {
+    "cell": "loop-c/iter-0",
+    "documents": 500,
+    "parser_pct": 41.06,
+    "parser_lines_covered": 342,
+    "parser_lines_total": 833,
+    "all_pct": 29.8,
+    "acceptance_rate": 0.308,
+    "productions_hit": 26,
+    "distinct_diagnostics": 16,
+    "boundaries": {
+      "name_len": {
+        "max": 9,
+        "p50": 4,
+        "p90": 9,
+        "distinct": 10
+      },
+      "attrs_per_element": {
+        "max": 5,
+        "p50": 1,
+        "p90": 4,
+        "distinct": 6
+      },
+      "entity_name_len": {
+        "max": 14,
+        "p50": 6,
+        "p90": 8,
+        "distinct": 9
+      },
+      "attr_value_len": {
+        "max": 3,
+        "p50": 3,
+        "p90": 3,
+        "distinct": 2
+      },
+      "depth": {
+        "max": 2,
+        "p50": 1,
+        "p90": 1,
+        "distinct": 3
+      }
+    },
+    "per_file": {
+      "mxml-file.c": {
+        "pct": 41.06,
+        "lines": 833,
+        "covered": 342
+      },
+      "mxml-node.c": {
+        "pct": 37.7,
+        "lines": 252,
+        "covered": 95
+      },
+      "mxml-attr.c": {
+        "pct": 33.85,
+        "lines": 65,
+        "covered": 22
+      },
+      "mxml-options.c": {
+        "pct": 43.48,
+        "lines": 92,
+        "covered": 40
+      },
+      "mxml-private.c": {
+        "pct": 64.86,
+        "lines": 37,
+        "covered": 24
+      },
+      "mxml-get.c": {
+        "pct": 3.49,
+        "lines": 86,
+        "covered": 3
+      },
+      "mxml-set.c": {
+        "pct": 0.0,
+        "lines": 222,
+        "covered": 0
+      },
+      "mxml-search.c": {
+        "pct": 0.0,
+        "lines": 68,
+        "covered": 0
+      },
+      "mxml-index.c": {
+        "pct": 0.0,
+        "lines": 110,
+        "covered": 0
+      },
+      "_total": {
+        "covered": 526,
+        "lines": 1765,
+        "pct": 29.8
+      }
+    }
+  },
+  {
+    "cell": "loop-c/iter-1",
+    "documents": 500,
+    "parser_pct": 40.34,
+    "parser_lines_covered": 336,
+    "parser_lines_total": 833,
+    "all_pct": 29.41,
+    "acceptance_rate": 0.42,
+    "productions_hit": 26,
+    "distinct_diagnostics": 14,
+    "boundaries": {
+      "name_len": {
+        "max": 9,
+        "p50": 1,
+        "p90": 9,
+        "distinct": 10
+      },
+      "attrs_per_element": {
+        "max": 6,
+        "p50": 0,
+        "p90": 4,
+        "distinct": 7
+      },
+      "entity_name_len": {
+        "max": 9,
+        "p50": 0,
+        "p90": 7,
+        "distinct": 9
+      },
+      "attr_value_len": {
+        "max": 3,
+        "p50": 0,
+        "p90": 3,
+        "distinct": 2
+      },
+      "depth": {
+        "max": 18,
+        "p50": 1,
+        "p90": 2,
+        "distinct": 7
+      }
+    },
+    "per_file": {
+      "mxml-file.c": {
+        "pct": 40.34,
+        "lines": 833,
+        "covered": 336
+      },
+      "mxml-node.c": {
+        "pct": 37.7,
+        "lines": 252,
+        "covered": 95
+      },
+      "mxml-attr.c": {
+        "pct": 33.85,
+        "lines": 65,
+        "covered": 22
+      },
+      "mxml-options.c": {
+        "pct": 42.39,
+        "lines": 92,
+        "covered": 39
+      },
+      "mxml-private.c": {
+        "pct": 64.86,
+        "lines": 37,
+        "covered": 24
+      },
+      "mxml-get.c": {
+        "pct": 3.49,
+        "lines": 86,
+        "covered": 3
+      },
+      "mxml-set.c": {
+        "pct": 0.0,
+        "lines": 222,
+        "covered": 0
+      },
+      "mxml-search.c": {
+        "pct": 0.0,
+        "lines": 68,
+        "covered": 0
+      },
+      "mxml-index.c": {
+        "pct": 0.0,
+        "lines": 110,
+        "covered": 0
+      },
+      "_total": {
+        "covered": 519,
+        "lines": 1765,
+        "pct": 29.41
+      }
+    }
+  },
+  {
+    "cell": "loop-c/iter-2",
+    "documents": 500,
+    "parser_pct": 40.1,
+    "parser_lines_covered": 334,
+    "parser_lines_total": 833,
+    "all_pct": 29.24,
+    "acceptance_rate": 0.434,
+    "productions_hit": 27,
+    "distinct_diagnostics": 14,
+    "boundaries": {
+      "name_len": {
+        "max": 9,
+        "p50": 2,
+        "p90": 9,
+        "distinct": 10
+      },
+      "attrs_per_element": {
+        "max": 5,
+        "p50": 0,
+        "p90": 4,
+        "distinct": 6
+      },
+      "entity_name_len": {
+        "max": 14,
+        "p50": 0,
+        "p90": 7,
+        "distinct": 10
+      },
+      "attr_value_len": {
+        "max": 3,
+        "p50": 0,
+        "p90": 3,
+        "distinct": 2
+      },
+      "depth": {
+        "max": 24,
+        "p50": 1,
+        "p90": 3,
+        "distinct": 10
+      }
+    },
+    "per_file": {
+      "mxml-file.c": {
+        "pct": 40.1,
+        "lines": 833,
+        "covered": 334
+      },
+      "mxml-node.c": {
+        "pct": 37.7,
+        "lines": 252,
+        "covered": 95
+      },
+      "mxml-attr.c": {
+        "pct": 33.85,
+        "lines": 65,
+        "covered": 22
+      },
+      "mxml-options.c": {
+        "pct": 41.3,
+        "lines": 92,
+        "covered": 38
+      },
+      "mxml-private.c": {
+        "pct": 64.86,
+        "lines": 37,
+        "covered": 24
+      },
+      "mxml-get.c": {
+        "pct": 3.49,
+        "lines": 86,
+        "covered": 3
+      },
+      "mxml-set.c": {
+        "pct": 0.0,
+        "lines": 222,
+        "covered": 0
+      },
+      "mxml-search.c": {
+        "pct": 0.0,
+        "lines": 68,
+        "covered": 0
+      },
+      "mxml-index.c": {
+        "pct": 0.0,
+        "lines": 110,
+        "covered": 0
+      },
+      "_total": {
+        "covered": 516,
+        "lines": 1765,
+        "pct": 29.24
+      }
+    }
+  },
+  {
+    "cell": "loop-c/iter-3",
+    "documents": 500,
+    "parser_pct": 40.1,
+    "parser_lines_covered": 334,
+    "parser_lines_total": 833,
+    "all_pct": 28.73,
+    "acceptance_rate": 0.416,
+    "productions_hit": 25,
+    "distinct_diagnostics": 16,
+    "boundaries": {
+      "name_len": {
+        "max": 9,
+        "p50": 1,
+        "p90": 9,
+        "distinct": 10
+      },
+      "attrs_per_element": {
+        "max": 5,
+        "p50": 0,
+        "p90": 3,
+        "distinct": 6
+      },
+      "entity_name_len": {
+        "max": 8,
+        "p50": 0,
+        "p90": 7,
+        "distinct": 9
+      },
+      "attr_value_len": {
+        "max": 3,
+        "p50": 0,
+        "p90": 3,
+        "distinct": 2
+      },
+      "depth": {
+        "max": 6,
+        "p50": 1,
+        "p90": 2,
+        "distinct": 6
+      }
+    },
+    "per_file": {
+      "mxml-file.c": {
+        "pct": 40.1,
+        "lines": 833,
+        "covered": 334
+      },
+      "mxml-node.c": {
+        "pct": 34.52,
+        "lines": 252,
+        "covered": 87
+      },
+      "mxml-attr.c": {
+        "pct": 33.85,
+        "lines": 65,
+        "covered": 22
+      },
+      "mxml-options.c": {
+        "pct": 40.22,
+        "lines": 92,
+        "covered": 37
+      },
+      "mxml-private.c": {
+        "pct": 64.86,
+        "lines": 37,
+        "covered": 24
+      },
+      "mxml-get.c": {
+        "pct": 3.49,
+        "lines": 86,
+        "covered": 3
+      },
+      "mxml-set.c": {
+        "pct": 0.0,
+        "lines": 222,
+        "covered": 0
+      },
+      "mxml-search.c": {
+        "pct": 0.0,
+        "lines": 68,
+        "covered": 0
+      },
+      "mxml-index.c": {
+        "pct": 0.0,
+        "lines": 110,
+        "covered": 0
+      },
+      "_total": {
+        "covered": 507,
+        "lines": 1765,
+        "pct": 28.73
+      }
+    }
+  },
+  {
+    "cell": "loop-c/iter-4",
+    "documents": 500,
+    "parser_pct": 38.42,
+    "parser_lines_covered": 320,
+    "parser_lines_total": 833,
+    "all_pct": 28.05,
+    "acceptance_rate": 0.388,
+    "productions_hit": 26,
+    "distinct_diagnostics": 13,
+    "boundaries": {
+      "name_len": {
+        "max": 18,
+        "p50": 1,
+        "p90": 9,
+        "distinct": 12
+      },
+      "attrs_per_element": {
+        "max": 5,
+        "p50": 0,
+        "p90": 4,
+        "distinct": 6
+      },
+      "entity_name_len": {
+        "max": 8,
+        "p50": 0,
+        "p90": 7,
+        "distinct": 6
+      },
+      "attr_value_len": {
+        "max": 3,
+        "p50": 0,
+        "p90": 3,
+        "distinct": 2
+      },
+      "depth": {
+        "max": 190,
+        "p50": 1,
+        "p90": 5,
+        "distinct": 18
+      }
+    },
+    "per_file": {
+      "mxml-file.c": {
+        "pct": 38.42,
+        "lines": 833,
+        "covered": 320
+      },
+      "mxml-node.c": {
+        "pct": 34.52,
+        "lines": 252,
+        "covered": 87
+      },
+      "mxml-attr.c": {
+        "pct": 33.85,
+        "lines": 65,
+        "covered": 22
+      },
+      "mxml-options.c": {
+        "pct": 42.39,
+        "lines": 92,
+        "covered": 39
+      },
+      "mxml-private.c": {
+        "pct": 64.86,
+        "lines": 37,
+        "covered": 24
+      },
+      "mxml-get.c": {
+        "pct": 3.49,
+        "lines": 86,
+        "covered": 3
+      },
+      "mxml-set.c": {
+        "pct": 0.0,
+        "lines": 222,
+        "covered": 0
+      },
+      "mxml-search.c": {
+        "pct": 0.0,
+        "lines": 68,
+        "covered": 0
+      },
+      "mxml-index.c": {
+        "pct": 0.0,
+        "lines": 110,
+        "covered": 0
+      },
+      "_total": {
+        "covered": 495,
+        "lines": 1765,
+        "pct": 28.05
+      }
+    }
+  },
+  {
+    "cell": "loop-d/iter-0",
+    "documents": 500,
+    "parser_pct": 37.33,
+    "parser_lines_covered": 311,
+    "parser_lines_total": 833,
+    "all_pct": 27.59,
+    "acceptance_rate": 0.366,
+    "productions_hit": 27,
+    "distinct_diagnostics": 12,
+    "boundaries": {
+      "name_len": {
+        "max": 389,
+        "p50": 3,
+        "p90": 193,
+        "distinct": 33
+      },
+      "attrs_per_element": {
+        "max": 257,
+        "p50": 0,
+        "p90": 32,
+        "distinct": 16
+      },
+      "entity_name_len": {
+        "max": 64,
+        "p50": 0,
+        "p90": 63,
+        "distinct": 16
+      },
+      "attr_value_len": {
+        "max": 3,
+        "p50": 0,
+        "p90": 3,
+        "distinct": 2
+      },
+      "depth": {
+        "max": 5000,
+        "p50": 1,
+        "p90": 250,
+        "distinct": 19
+      }
+    },
+    "per_file": {
+      "mxml-file.c": {
+        "pct": 37.33,
+        "lines": 833,
+        "covered": 311
+      },
+      "mxml-node.c": {
+        "pct": 34.52,
+        "lines": 252,
+        "covered": 87
+      },
+      "mxml-attr.c": {
+        "pct": 33.85,
+        "lines": 65,
+        "covered": 22
+      },
+      "mxml-options.c": {
+        "pct": 43.48,
+        "lines": 92,
+        "covered": 40
+      },
+      "mxml-private.c": {
+        "pct": 64.86,
+        "lines": 37,
+        "covered": 24
+      },
+      "mxml-get.c": {
+        "pct": 3.49,
+        "lines": 86,
+        "covered": 3
+      },
+      "mxml-set.c": {
+        "pct": 0.0,
+        "lines": 222,
+        "covered": 0
+      },
+      "mxml-search.c": {
+        "pct": 0.0,
+        "lines": 68,
+        "covered": 0
+      },
+      "mxml-index.c": {
+        "pct": 0.0,
+        "lines": 110,
+        "covered": 0
+      },
+      "_total": {
+        "covered": 487,
+        "lines": 1765,
+        "pct": 27.59
+      }
+    }
+  },
+  {
+    "cell": "loop-e/iter-0",
+    "documents": 500,
+    "parser_pct": 41.06,
+    "parser_lines_covered": 342,
+    "parser_lines_total": 833,
+    "all_pct": 29.75,
+    "acceptance_rate": 0.5,
+    "productions_hit": 26,
+    "distinct_diagnostics": 15,
+    "boundaries": {
+      "name_len": {
+        "max": 17,
+        "p50": 3,
+        "p90": 16,
+        "distinct": 9
+      },
+      "attrs_per_element": {
+        "max": 101,
+        "p50": 0,
+        "p90": 1,
+        "distinct": 5
+      },
+      "entity_name_len": {
+        "max": 21,
+        "p50": 0,
+        "p90": 3,
+        "distinct": 10
+      },
+      "attr_value_len": {
+        "max": 3,
+        "p50": 0,
+        "p90": 3,
+        "distinct": 2
+      },
+      "depth": {
+        "max": 3000,
+        "p50": 4,
+        "p90": 256,
+        "distinct": 34
+      }
+    },
+    "per_file": {
+      "mxml-file.c": {
+        "pct": 41.06,
+        "lines": 833,
+        "covered": 342
+      },
+      "mxml-node.c": {
+        "pct": 37.7,
+        "lines": 252,
+        "covered": 95
+      },
+      "mxml-attr.c": {
+        "pct": 33.85,
+        "lines": 65,
+        "covered": 22
+      },
+      "mxml-options.c": {
+        "pct": 42.39,
+        "lines": 92,
+        "covered": 39
+      },
+      "mxml-private.c": {
+        "pct": 64.86,
+        "lines": 37,
+        "covered": 24
+      },
+      "mxml-get.c": {
+        "pct": 3.49,
+        "lines": 86,
+        "covered": 3
+      },
+      "mxml-set.c": {
+        "pct": 0.0,
+        "lines": 222,
+        "covered": 0
+      },
+      "mxml-search.c": {
+        "pct": 0.0,
+        "lines": 68,
+        "covered": 0
+      },
+      "mxml-index.c": {
+        "pct": 0.0,
+        "lines": 110,
+        "covered": 0
+      },
+      "_total": {
+        "covered": 525,
+        "lines": 1765,
+        "pct": 29.75
+      }
+    }
+  },
+  {
+    "cell": "loop-f/iter-0",
+    "documents": 500,
+    "parser_pct": 39.5,
+    "parser_lines_covered": 329,
+    "parser_lines_total": 833,
+    "all_pct": 28.9,
+    "acceptance_rate": 0.438,
+    "productions_hit": 26,
+    "distinct_diagnostics": 12,
+    "boundaries": {
+      "name_len": {
+        "max": 257,
+        "p50": 4,
+        "p90": 8,
+        "distinct": 14
+      },
+      "attrs_per_element": {
+        "max": 64,
+        "p50": 0,
+        "p90": 8,
+        "distinct": 9
+      },
+      "entity_name_len": {
+        "max": 21,
+        "p50": 0,
+        "p90": 0,
+        "distinct": 11
+      },
+      "attr_value_len": {
+        "max": 3,
+        "p50": 0,
+        "p90": 3,
+        "distinct": 2
+      },
+      "depth": {
+        "max": 3500,
+        "p50": 3,
+        "p90": 34,
+        "distinct": 18
+      }
+    },
+    "per_file": {
+      "mxml-file.c": {
+        "pct": 39.5,
+        "lines": 833,
+        "covered": 329
+      },
+      "mxml-node.c": {
+        "pct": 37.7,
+        "lines": 252,
+        "covered": 95
+      },
+      "mxml-attr.c": {
+        "pct": 33.85,
+        "lines": 65,
+        "covered": 22
+      },
+      "mxml-options.c": {
+        "pct": 40.22,
+        "lines": 92,
+        "covered": 37
+      },
+      "mxml-private.c": {
+        "pct": 64.86,
+        "lines": 37,
+        "covered": 24
+      },
+      "mxml-get.c": {
+        "pct": 3.49,
+        "lines": 86,
+        "covered": 3
+      },
+      "mxml-set.c": {
+        "pct": 0.0,
+        "lines": 222,
+        "covered": 0
+      },
+      "mxml-search.c": {
+        "pct": 0.0,
+        "lines": 68,
+        "covered": 0
+      },
+      "mxml-index.c": {
+        "pct": 0.0,
+        "lines": 110,
+        "covered": 0
+      },
+      "_total": {
+        "covered": 510,
+        "lines": 1765,
+        "pct": 28.9
+      }
+    }
+  },
+  {
+    "cell": "loop-f/iter-1",
+    "documents": 500,
+    "parser_pct": 37.21,
+    "parser_lines_covered": 310,
+    "parser_lines_total": 833,
+    "all_pct": 27.25,
+    "acceptance_rate": 0.388,
+    "productions_hit": 25,
+    "distinct_diagnostics": 13,
+    "boundaries": {
+      "name_len": {
+        "max": 261,
+        "p50": 4,
+        "p90": 254,
+        "distinct": 15
+      },
+      "attrs_per_element": {
+        "max": 128,
+        "p50": 0,
+        "p90": 63,
+        "distinct": 14
+      },
+      "entity_name_len": {
+        "max": 63,
+        "p50": 0,
+        "p90": 0,
+        "distinct": 10
+      },
+      "attr_value_len": {
+        "max": 3,
+        "p50": 0,
+        "p90": 3,
+        "distinct": 2
+      },
+      "depth": {
+        "max": 5000,
+        "p50": 5,
+        "p90": 55,
+        "distinct": 26
+      }
+    },
+    "per_file": {
+      "mxml-file.c": {
+        "pct": 37.21,
+        "lines": 833,
+        "covered": 310
+      },
+      "mxml-node.c": {
+        "pct": 34.52,
+        "lines": 252,
+        "covered": 87
+      },
+      "mxml-attr.c": {
+        "pct": 33.85,
+        "lines": 65,
+        "covered": 22
+      },
+      "mxml-options.c": {
+        "pct": 38.04,
+        "lines": 92,
+        "covered": 35
+      },
+      "mxml-private.c": {
+        "pct": 64.86,
+        "lines": 37,
+        "covered": 24
+      },
+      "mxml-get.c": {
+        "pct": 3.49,
+        "lines": 86,
+        "covered": 3
+      },
+      "mxml-set.c": {
+        "pct": 0.0,
+        "lines": 222,
+        "covered": 0
+      },
+      "mxml-search.c": {
+        "pct": 0.0,
+        "lines": 68,
+        "covered": 0
+      },
+      "mxml-index.c": {
+        "pct": 0.0,
+        "lines": 110,
+        "covered": 0
+      },
+      "_total": {
+        "covered": 481,
+        "lines": 1765,
+        "pct": 27.25
+      }
+    }
+  },
+  {
+    "cell": "loop-f/iter-2",
+    "documents": 500,
+    "parser_pct": 39.98,
+    "parser_lines_covered": 333,
+    "parser_lines_total": 833,
+    "all_pct": 29.24,
+    "acceptance_rate": 0.424,
+    "productions_hit": 27,
+    "distinct_diagnostics": 15,
+    "boundaries": {
+      "name_len": {
+        "max": 384,
+        "p50": 4,
+        "p90": 8,
+        "distinct": 16
+      },
+      "attrs_per_element": {
+        "max": 150,
+        "p50": 0,
+        "p90": 3,
+        "distinct": 9
+      },
+      "entity_name_len": {
+        "max": 25,
+        "p50": 0,
+        "p90": 3,
+        "distinct": 10
+      },
+      "attr_value_len": {
+        "max": 3,
+        "p50": 0,
+        "p90": 3,
+        "distinct": 2
+      },
+      "depth": {
+        "max": 17000,
+        "p50": 3,
+        "p90": 55,
+        "distinct": 21
+      }
+    },
+    "per_file": {
+      "mxml-file.c": {
+        "pct": 39.98,
+        "lines": 833,
+        "covered": 333
+      },
+      "mxml-node.c": {
+        "pct": 37.7,
+        "lines": 252,
+        "covered": 95
+      },
+      "mxml-attr.c": {
+        "pct": 33.85,
+        "lines": 65,
+        "covered": 22
+      },
+      "mxml-options.c": {
+        "pct": 41.3,
+        "lines": 92,
+        "covered": 38
+      },
+      "mxml-private.c": {
+        "pct": 64.86,
+        "lines": 37,
+        "covered": 24
+      },
+      "mxml-get.c": {
+        "pct": 4.65,
+        "lines": 86,
+        "covered": 4
+      },
+      "mxml-set.c": {
+        "pct": 0.0,
+        "lines": 222,
+        "covered": 0
+      },
+      "mxml-search.c": {
+        "pct": 0.0,
+        "lines": 68,
+        "covered": 0
+      },
+      "mxml-index.c": {
+        "pct": 0.0,
+        "lines": 110,
+        "covered": 0
+      },
+      "_total": {
+        "covered": 516,
+        "lines": 1765,
+        "pct": 29.24
+      }
+    }
+  },
+  {
+    "cell": "loop-f/iter-3",
+    "documents": 500,
+    "parser_pct": 39.5,
+    "parser_lines_covered": 329,
+    "parser_lines_total": 833,
+    "all_pct": 28.78,
+    "acceptance_rate": 0.634,
+    "productions_hit": 25,
+    "distinct_diagnostics": 15,
+    "boundaries": {
+      "name_len": {
+        "max": 520,
+        "p50": 4,
+        "p90": 100,
+        "distinct": 18
+      },
+      "attrs_per_element": {
+        "max": 768,
+        "p50": 0,
+        "p90": 16,
+        "distinct": 27
+      },
+      "entity_name_len": {
+        "max": 5,
+        "p50": 0,
+        "p90": 2,
+        "distinct": 6
+      },
+      "attr_value_len": {
+        "max": 3,
+        "p50": 0,
+        "p90": 3,
+        "distinct": 2
+      },
+      "depth": {
+        "max": 16500,
+        "p50": 2,
+        "p90": 55,
+        "distinct": 24
+      }
+    },
+    "per_file": {
+      "mxml-file.c": {
+        "pct": 39.5,
+        "lines": 833,
+        "covered": 329
+      },
+      "mxml-node.c": {
+        "pct": 37.7,
+        "lines": 252,
+        "covered": 95
+      },
+      "mxml-attr.c": {
+        "pct": 33.85,
+        "lines": 65,
+        "covered": 22
+      },
+      "mxml-options.c": {
+        "pct": 36.96,
+        "lines": 92,
+        "covered": 34
+      },
+      "mxml-private.c": {
+        "pct": 64.86,
+        "lines": 37,
+        "covered": 24
+      },
+      "mxml-get.c": {
+        "pct": 4.65,
+        "lines": 86,
+        "covered": 4
+      },
+      "mxml-set.c": {
+        "pct": 0.0,
+        "lines": 222,
+        "covered": 0
+      },
+      "mxml-search.c": {
+        "pct": 0.0,
+        "lines": 68,
+        "covered": 0
+      },
+      "mxml-index.c": {
+        "pct": 0.0,
+        "lines": 110,
+        "covered": 0
+      },
+      "_total": {
+        "covered": 508,
+        "lines": 1765,
+        "pct": 28.78
+      }
+    }
+  },
+  {
+    "cell": "loop/iter-0",
+    "documents": 500,
+    "parser_pct": 39.02,
+    "parser_lines_covered": 325,
+    "parser_lines_total": 833,
+    "all_pct": 28.61,
+    "acceptance_rate": 0.326,
+    "productions_hit": 22,
+    "distinct_diagnostics": 12,
+    "boundaries": {
+      "name_len": {
+        "max": 8,
+        "p50": 3,
+        "p90": 7,
+        "distinct": 9
+      },
+      "attrs_per_element": {
+        "max": 4,
+        "p50": 0,
+        "p90": 3,
+        "distinct": 5
+      },
+      "entity_name_len": {
+        "max": 14,
+        "p50": 0,
+        "p90": 3,
+        "distinct": 7
+      },
+      "attr_value_len": {
+        "max": 3,
+        "p50": 0,
+        "p90": 3,
+        "distinct": 2
+      },
+      "depth": {
+        "max": 31,
+        "p50": 1,
+        "p90": 5,
+        "distinct": 12
+      }
+    },
+    "per_file": {
+      "mxml-file.c": {
+        "pct": 39.02,
+        "lines": 833,
+        "covered": 325
+      },
+      "mxml-node.c": {
+        "pct": 37.7,
+        "lines": 252,
+        "covered": 95
+      },
+      "mxml-attr.c": {
+        "pct": 33.85,
+        "lines": 65,
+        "covered": 22
+      },
+      "mxml-options.c": {
+        "pct": 39.13,
+        "lines": 92,
+        "covered": 36
+      },
+      "mxml-private.c": {
+        "pct": 64.86,
+        "lines": 37,
+        "covered": 24
+      },
+      "mxml-get.c": {
+        "pct": 3.49,
+        "lines": 86,
+        "covered": 3
+      },
+      "mxml-set.c": {
+        "pct": 0.0,
+        "lines": 222,
+        "covered": 0
+      },
+      "mxml-search.c": {
+        "pct": 0.0,
+        "lines": 68,
+        "covered": 0
+      },
+      "mxml-index.c": {
+        "pct": 0.0,
+        "lines": 110,
+        "covered": 0
+      },
+      "_total": {
+        "covered": 505,
+        "lines": 1765,
+        "pct": 28.61
+      }
+    }
+  },
+  {
+    "cell": "loop/iter-1",
+    "documents": 500,
+    "parser_pct": 40.1,
+    "parser_lines_covered": 334,
+    "parser_lines_total": 833,
+    "all_pct": 29.18,
+    "acceptance_rate": 0.276,
+    "productions_hit": 23,
+    "distinct_diagnostics": 17,
+    "boundaries": {
+      "name_len": {
+        "max": 7,
+        "p50": 3,
+        "p90": 7,
+        "distinct": 8
+      },
+      "attrs_per_element": {
+        "max": 4,
+        "p50": 0,
+        "p90": 3,
+        "distinct": 5
+      },
+      "entity_name_len": {
+        "max": 14,
+        "p50": 0,
+        "p90": 4,
+        "distinct": 10
+      },
+      "attr_value_len": {
+        "max": 3,
+        "p50": 0,
+        "p90": 3,
+        "distinct": 2
+      },
+      "depth": {
+        "max": 5,
+        "p50": 1,
+        "p90": 2,
+        "distinct": 6
+      }
+    },
+    "per_file": {
+      "mxml-file.c": {
+        "pct": 40.1,
+        "lines": 833,
+        "covered": 334
+      },
+      "mxml-node.c": {
+        "pct": 37.7,
+        "lines": 252,
+        "covered": 95
+      },
+      "mxml-attr.c": {
+        "pct": 33.85,
+        "lines": 65,
+        "covered": 22
+      },
+      "mxml-options.c": {
+        "pct": 40.22,
+        "lines": 92,
+        "covered": 37
+      },
+      "mxml-private.c": {
+        "pct": 64.86,
+        "lines": 37,
+        "covered": 24
+      },
+      "mxml-get.c": {
+        "pct": 3.49,
+        "lines": 86,
+        "covered": 3
+      },
+      "mxml-set.c": {
+        "pct": 0.0,
+        "lines": 222,
+        "covered": 0
+      },
+      "mxml-search.c": {
+        "pct": 0.0,
+        "lines": 68,
+        "covered": 0
+      },
+      "mxml-index.c": {
+        "pct": 0.0,
+        "lines": 110,
+        "covered": 0
+      },
+      "_total": {
+        "covered": 515,
+        "lines": 1765,
+        "pct": 29.18
+      }
+    }
+  },
+  {
+    "cell": "loop/iter-2",
+    "documents": 500,
+    "parser_pct": 39.98,
+    "parser_lines_covered": 333,
+    "parser_lines_total": 833,
+    "all_pct": 29.07,
+    "acceptance_rate": 0.396,
+    "productions_hit": 22,
+    "distinct_diagnostics": 16,
+    "boundaries": {
+      "name_len": {
+        "max": 8,
+        "p50": 4,
+        "p90": 7,
+        "distinct": 9
+      },
+      "attrs_per_element": {
+        "max": 4,
+        "p50": 0,
+        "p90": 2,
+        "distinct": 5
+      },
+      "entity_name_len": {
+        "max": 11,
+        "p50": 0,
+        "p90": 3,
+        "distinct": 7
+      },
+      "attr_value_len": {
+        "max": 3,
+        "p50": 0,
+        "p90": 3,
+        "distinct": 2
+      },
+      "depth": {
+        "max": 81,
+        "p50": 1,
+        "p90": 11,
+        "distinct": 18
+      }
+    },
+    "per_file": {
+      "mxml-file.c": {
+        "pct": 39.98,
+        "lines": 833,
+        "covered": 333
+      },
+      "mxml-node.c": {
+        "pct": 37.7,
+        "lines": 252,
+        "covered": 95
+      },
+      "mxml-attr.c": {
+        "pct": 33.85,
+        "lines": 65,
+        "covered": 22
+      },
+      "mxml-options.c": {
+        "pct": 39.13,
+        "lines": 92,
+        "covered": 36
+      },
+      "mxml-private.c": {
+        "pct": 64.86,
+        "lines": 37,
+        "covered": 24
+      },
+      "mxml-get.c": {
+        "pct": 3.49,
+        "lines": 86,
+        "covered": 3
+      },
+      "mxml-set.c": {
+        "pct": 0.0,
+        "lines": 222,
+        "covered": 0
+      },
+      "mxml-search.c": {
+        "pct": 0.0,
+        "lines": 68,
+        "covered": 0
+      },
+      "mxml-index.c": {
+        "pct": 0.0,
+        "lines": 110,
+        "covered": 0
+      },
+      "_total": {
+        "covered": 513,
+        "lines": 1765,
+        "pct": 29.07
+      }
+    }
+  },
+  {
+    "cell": "loop/iter-3",
+    "documents": 500,
+    "parser_pct": 39.5,
+    "parser_lines_covered": 329,
+    "parser_lines_total": 833,
+    "all_pct": 29.07,
+    "acceptance_rate": 0.5,
+    "productions_hit": 24,
+    "distinct_diagnostics": 13,
+    "boundaries": {
+      "name_len": {
+        "max": 7,
+        "p50": 4,
+        "p90": 7,
+        "distinct": 8
+      },
+      "attrs_per_element": {
+        "max": 4,
+        "p50": 0,
+        "p90": 2,
+        "distinct": 5
+      },
+      "entity_name_len": {
+        "max": 14,
+        "p50": 0,
+        "p90": 4,
+        "distinct": 10
+      },
+      "attr_value_len": {
+        "max": 3,
+        "p50": 0,
+        "p90": 3,
+        "distinct": 2
+      },
+      "depth": {
+        "max": 23,
+        "p50": 1,
+        "p90": 4,
+        "distinct": 7
+      }
+    },
+    "per_file": {
+      "mxml-file.c": {
+        "pct": 39.5,
+        "lines": 833,
+        "covered": 329
+      },
+      "mxml-node.c": {
+        "pct": 37.7,
+        "lines": 252,
+        "covered": 95
+      },
+      "mxml-attr.c": {
+        "pct": 33.85,
+        "lines": 65,
+        "covered": 22
+      },
+      "mxml-options.c": {
+        "pct": 43.48,
+        "lines": 92,
+        "covered": 40
+      },
+      "mxml-private.c": {
+        "pct": 64.86,
+        "lines": 37,
+        "covered": 24
+      },
+      "mxml-get.c": {
+        "pct": 3.49,
+        "lines": 86,
+        "covered": 3
+      },
+      "mxml-set.c": {
+        "pct": 0.0,
+        "lines": 222,
+        "covered": 0
+      },
+      "mxml-search.c": {
+        "pct": 0.0,
+        "lines": 68,
+        "covered": 0
+      },
+      "mxml-index.c": {
+        "pct": 0.0,
+        "lines": 110,
+        "covered": 0
+      },
+      "_total": {
+        "covered": 513,
+        "lines": 1765,
+        "pct": 29.07
+      }
+    }
+  },
+  {
+    "cell": "loop/iter-4",
+    "documents": 500,
+    "parser_pct": 39.14,
+    "parser_lines_covered": 326,
+    "parser_lines_total": 833,
+    "all_pct": 28.78,
+    "acceptance_rate": 0.316,
+    "productions_hit": 22,
+    "distinct_diagnostics": 13,
+    "boundaries": {
+      "name_len": {
+        "max": 7,
+        "p50": 4,
+        "p90": 7,
+        "distinct": 8
+      },
+      "attrs_per_element": {
+        "max": 4,
+        "p50": 0,
+        "p90": 3,
+        "distinct": 5
+      },
+      "entity_name_len": {
+        "max": 21,
+        "p50": 0,
+        "p90": 6,
+        "distinct": 14
+      },
+      "attr_value_len": {
+        "max": 3,
+        "p50": 0,
+        "p90": 3,
+        "distinct": 2
+      },
+      "depth": {
+        "max": 73,
+        "p50": 1,
+        "p90": 6,
+        "distinct": 15
+      }
+    },
+    "per_file": {
+      "mxml-file.c": {
+        "pct": 39.14,
+        "lines": 833,
+        "covered": 326
+      },
+      "mxml-node.c": {
+        "pct": 37.7,
+        "lines": 252,
+        "covered": 95
+      },
+      "mxml-attr.c": {
+        "pct": 33.85,
+        "lines": 65,
+        "covered": 22
+      },
+      "mxml-options.c": {
+        "pct": 41.3,
+        "lines": 92,
+        "covered": 38
+      },
+      "mxml-private.c": {
+        "pct": 64.86,
+        "lines": 37,
+        "covered": 24
+      },
+      "mxml-get.c": {
+        "pct": 3.49,
+        "lines": 86,
+        "covered": 3
+      },
+      "mxml-set.c": {
+        "pct": 0.0,
+        "lines": 222,
+        "covered": 0
+      },
+      "mxml-search.c": {
+        "pct": 0.0,
+        "lines": 68,
+        "covered": 0
+      },
+      "mxml-index.c": {
+        "pct": 0.0,
+        "lines": 110,
+        "covered": 0
+      },
+      "_total": {
+        "covered": 508,
+        "lines": 1765,
+        "pct": 28.78
+      }
+    }
+  }
+]

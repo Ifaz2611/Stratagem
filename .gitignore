@@ -1,0 +1,41 @@
+# Upstream bug-report drafts, kept out of the repository.
+contrib/
+
+# Scratch output of the strategy validation gate.
+runs/.validate/
+
+# Secrets. Only .env.example is committed.
+.env
+.env.local
+
+# Vendored target: fetched by scripts/fetch_target.sh at a verified SHA.
+# Not committed, so the pin stays the single source of truth.
+third_party/
+
+.venv/
+__pycache__/
+*.pyc
+
+# Compiled harness binaries
+build/
+
+# Hypothesis's internal example cache. Deliberately excluded: it would carry
+# examples between iterations and make cross-iteration comparisons dishonest.
+.hypothesis/
+
+# Coverage artifacts from the Phase 7 study
+*.gcda
+*.gcno
+*.gcov
+coverage/
+
+# Regenerable verification output: scripts/verify_replay.sh writes a full copy
+# of a run here to compare against the committed one. Reproducible on demand,
+# so committing it would just duplicate runs/<id>/ at ~1.4 MB.
+runs/*-replay/
+
+# Scratch: the loop writes each generated strategy here so the campaign can
+# import it, and every run overwrites the previous run's copy. The artifact of
+# record is runs/<id>/iterations/iter-N/strategy.py, which is what
+# scripts/verify_replay.sh checks against the transcript.
+fuzzer/strategies/gen_iter*.py

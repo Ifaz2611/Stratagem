@@ -1,0 +1,97 @@
+{
+  "run_id": "loop-c",
+  "backend": "cli",
+  "model": "(backend default)",
+  "prompt_set": "v2",
+  "seed_model": "sonnet",
+  "refine_model": "sonnet",
+  "max_examples": 500,
+  "iterations": [
+    {
+      "iteration": 0,
+      "strategy": "gen_iter0",
+      "acceptance_rate": 0.308,
+      "productions_hit": 26,
+      "productions_total": 27,
+      "productions_missing": [
+        "g_nesting_deep"
+      ],
+      "max_depth": 2,
+      "distinct_diagnostic_templates": 16,
+      "crash_count": 0,
+      "crash_groups": [],
+      "cost_usd_cumulative": 0.6063
+    },
+    {
+      "iteration": 1,
+      "strategy": "gen_iter1",
+      "acceptance_rate": 0.42,
+      "productions_hit": 26,
+      "productions_total": 27,
+      "productions_missing": [
+        "x_entity_unsupported"
+      ],
+      "max_depth": 18,
+      "distinct_diagnostic_templates": 14,
+      "crash_count": 0,
+      "crash_groups": [],
+      "cost_usd_cumulative": 1.0562
+    },
+    {
+      "iteration": 2,
+      "strategy": "gen_iter2",
+      "acceptance_rate": 0.434,
+      "productions_hit": 27,
+      "productions_total": 27,
+      "productions_missing": [],
+      "max_depth": 24,
+      "distinct_diagnostic_templates": 14,
+      "crash_count": 0,
+      "crash_groups": [],
+      "cost_usd_cumulative": 1.7101
+    },
+    {
+      "iteration": 3,
+      "strategy": "gen_iter3",
+      "acceptance_rate": 0.416,
+      "productions_hit": 25,
+      "productions_total": 27,
+      "productions_missing": [
+        "g_nesting_deep",
+        "x_multiple_roots"
+      ],
+      "max_depth": 6,
+      "distinct_diagnostic_templates": 16,
+      "crash_count": 0,
+      "crash_groups": [],
+      "cost_usd_cumulative": 2.3171
+    },
+    {
+      "iteration": 4,
+      "strategy": "gen_iter4",
+      "acceptance_rate": 0.388,
+      "productions_hit": 26,
+      "productions_total": 27,
+      "productions_missing": [
+        "x_multiple_roots"
+      ],
+      "max_depth": 190,
+      "distinct_diagnostic_templates": 13,
+      "crash_count": 0,
+      "crash_groups": [],
+      "cost_usd_cumulative": 4.5147
+    }
+  ],
+  "budget": {
+    "llm_calls": 6,
+    "input_tokens": 18,
+    "output_tokens": 352375,
+    "billable_input_tokens": 387325,
+    "authored_prompt_chars": 205301,
+    "authored_prompt_tokens_est": 51325,
+    "cost_usd": 4.5147,
+    "max_usd": 5.0
+  },
+  "stopped_early": null,
+  "resumed_from": 4
+}

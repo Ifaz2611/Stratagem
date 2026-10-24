@@ -1,0 +1,91 @@
+{
+  "run_id": "loop",
+  "backend": "cli",
+  "model": "claude-sonnet-5",
+  "max_examples": 500,
+  "iterations": [
+    {
+      "iteration": 0,
+      "strategy": "gen_iter0",
+      "acceptance_rate": 0.316,
+      "productions_hit": 23,
+      "productions_total": 23,
+      "productions_missing": [],
+      "max_depth": 40,
+      "distinct_diagnostic_templates": 16,
+      "crash_count": 0,
+      "crash_groups": [],
+      "cost_usd_cumulative": 0.4403
+    },
+    {
+      "iteration": 1,
+      "strategy": "gen_iter1",
+      "acceptance_rate": 0.332,
+      "productions_hit": 22,
+      "productions_total": 23,
+      "productions_missing": [
+        "g_nesting_deep"
+      ],
+      "max_depth": 5,
+      "distinct_diagnostic_templates": 16,
+      "crash_count": 0,
+      "crash_groups": [],
+      "cost_usd_cumulative": 0.7583
+    },
+    {
+      "iteration": 2,
+      "strategy": "gen_iter2",
+      "acceptance_rate": 0.406,
+      "productions_hit": 22,
+      "productions_total": 23,
+      "productions_missing": [
+        "g_entity_named"
+      ],
+      "max_depth": 87,
+      "distinct_diagnostic_templates": 15,
+      "crash_count": 0,
+      "crash_groups": [],
+      "cost_usd_cumulative": 1.1881
+    },
+    {
+      "iteration": 3,
+      "strategy": "gen_iter3",
+      "acceptance_rate": 0.504,
+      "productions_hit": 22,
+      "productions_total": 23,
+      "productions_missing": [
+        "x_unterminated"
+      ],
+      "max_depth": 144,
+      "distinct_diagnostic_templates": 13,
+      "crash_count": 0,
+      "crash_groups": [],
+      "cost_usd_cumulative": 1.6596
+    },
+    {
+      "iteration": 4,
+      "strategy": "gen_iter4",
+      "acceptance_rate": 0.472,
+      "productions_hit": 23,
+      "productions_total": 23,
+      "productions_missing": [],
+      "max_depth": 107,
+      "distinct_diagnostic_templates": 13,
+      "crash_count": 0,
+      "crash_groups": [],
+      "cost_usd_cumulative": 2.0091
+    }
+  ],
+  "budget": {
+    "llm_calls": 5,
+    "input_tokens": 10,
+    "output_tokens": 171307,
+    "billable_input_tokens": 117266,
+    "authored_prompt_chars": 108164,
+    "authored_prompt_tokens_est": 27041,
+    "cost_usd": 2.0091,
+    "max_usd": 5.0
+  },
+  "stopped_early": null,
+  "resumed_from": 3
+}

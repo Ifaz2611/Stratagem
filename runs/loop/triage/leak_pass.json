@@ -1,0 +1,18 @@
+{
+  "documents_tested": 250,
+  "documents_leaking": 80,
+  "distinct_signatures": 1,
+  "signatures": {
+    "abcd11886ebe": {
+      "count": 80,
+      "label": "memory-leak mxml_new@mxml-node.c",
+      "frames": [
+        "mxml_new@mxml-node.c",
+        "mxmlNewElement@mxml-node.c",
+        "mxml_load_data@mxml-file.c",
+        "mxmlLoadString@mxml-file.c"
+      ],
+      "example": "<a a>0</a>"
+    }
+  }
+}

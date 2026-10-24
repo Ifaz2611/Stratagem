@@ -1,0 +1,36 @@
+{
+  "run_id": "loop-d",
+  "backend": "cli",
+  "model": "(backend default)",
+  "prompt_set": "v3",
+  "seed_model": "sonnet",
+  "refine_model": "sonnet",
+  "max_examples": 500,
+  "iterations": [
+    {
+      "iteration": 0,
+      "strategy": "gen_iter0",
+      "acceptance_rate": 0.366,
+      "productions_hit": 27,
+      "productions_total": 27,
+      "productions_missing": [],
+      "max_depth": 5000,
+      "distinct_diagnostic_templates": 15,
+      "crash_count": 0,
+      "crash_groups": [],
+      "cost_usd_cumulative": 4.18
+    }
+  ],
+  "budget": {
+    "llm_calls": 3,
+    "input_tokens": 14,
+    "output_tokens": 344011,
+    "billable_input_tokens": 269898,
+    "authored_prompt_chars": 37637,
+    "authored_prompt_tokens_est": 9409,
+    "cost_usd": 4.18,
+    "max_usd": 5.0
+  },
+  "stopped_early": "LLMError: claude CLI exited 1: ",
+  "resumed_from": null
+}

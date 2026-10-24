@@ -1,0 +1,194 @@
+[
+  {
+    "iteration": "baseline",
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "acceptance_pct": [
+      0.4,
+      0.0,
+      0.2
+    ],
+    "diagnostics": [
+      3,
+      3,
+      4
+    ],
+    "max_depth": [
+      1,
+      0,
+      0
+    ],
+    "productions": [
+      6,
+      5,
+      5
+    ],
+    "acceptance_mean": 0.2,
+    "acceptance_stdev": 0.2,
+    "diagnostics_mean": 3.33,
+    "diagnostics_stdev": 0.58
+  },
+  {
+    "iteration": 0,
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "acceptance_pct": [
+      35.6,
+      30.4,
+      30.0
+    ],
+    "diagnostics": [
+      12,
+      12,
+      11
+    ],
+    "max_depth": [
+      36,
+      38,
+      37
+    ],
+    "productions": [
+      24,
+      23,
+      24
+    ],
+    "acceptance_mean": 32.0,
+    "acceptance_stdev": 3.12,
+    "diagnostics_mean": 11.67,
+    "diagnostics_stdev": 0.58
+  },
+  {
+    "iteration": 1,
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "acceptance_pct": [
+      41.199999999999996,
+      33.4,
+      34.4
+    ],
+    "diagnostics": [
+      14,
+      14,
+      12
+    ],
+    "max_depth": [
+      5,
+      4,
+      5
+    ],
+    "productions": [
+      22,
+      22,
+      21
+    ],
+    "acceptance_mean": 36.33,
+    "acceptance_stdev": 4.24,
+    "diagnostics_mean": 13.33,
+    "diagnostics_stdev": 1.15
+  },
+  {
+    "iteration": 2,
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "acceptance_pct": [
+      40.2,
+      42.6,
+      34.8
+    ],
+    "diagnostics": [
+      16,
+      14,
+      15
+    ],
+    "max_depth": [
+      73,
+      84,
+      124
+    ],
+    "productions": [
+      22,
+      24,
+      22
+    ],
+    "acceptance_mean": 39.2,
+    "acceptance_stdev": 3.99,
+    "diagnostics_mean": 15,
+    "diagnostics_stdev": 1.0
+  },
+  {
+    "iteration": 3,
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "acceptance_pct": [
+      41.199999999999996,
+      46.2,
+      50.8
+    ],
+    "diagnostics": [
+      15,
+      13,
+      12
+    ],
+    "max_depth": [
+      150,
+      54,
+      67
+    ],
+    "productions": [
+      24,
+      24,
+      24
+    ],
+    "acceptance_mean": 46.07,
+    "acceptance_stdev": 4.8,
+    "diagnostics_mean": 13.33,
+    "diagnostics_stdev": 1.53
+  },
+  {
+    "iteration": 4,
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "acceptance_pct": [
+      41.0,
+      53.400000000000006,
+      42.0
+    ],
+    "diagnostics": [
+      15,
+      14,
+      13
+    ],
+    "max_depth": [
+      67,
+      95,
+      132
+    ],
+    "productions": [
+      23,
+      23,
+      23
+    ],
+    "acceptance_mean": 45.47,
+    "acceptance_stdev": 6.89,
+    "diagnostics_mean": 14,
+    "diagnostics_stdev": 1.0
+  }
+]

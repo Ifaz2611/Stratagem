@@ -1,0 +1,128 @@
+{
+  "strategy": "baseline",
+  "mode": "survey",
+  "random_seed": null,
+  "examples": 500,
+  "wall_clock_s": 2.65,
+  "outcomes": {
+    "rejected": 498,
+    "parsed_clean": 1,
+    "parsed_diag": 1
+  },
+  "acceptance_rate": 0.004,
+  "buckets": {
+    "near_miss": {
+      "n": 335,
+      "accepted": 1,
+      "share": 0.67,
+      "acceptance_rate": 0.003
+    },
+    "byte_hostile": {
+      "n": 165,
+      "accepted": 1,
+      "share": 0.33,
+      "acceptance_rate": 0.006
+    }
+  },
+  "crash_count": 0,
+  "unique_crash_inputs": 0,
+  "xml_shaped_rate": 0.006,
+  "diagnostic_templates": {
+    "XML does not start with '%s' (saw '%s').": 452,
+    "Bad control character 0x%x not allowed by XML standard.": 43,
+    "XML does not start with '%s' (saw '": 2,
+    "Early EOF in processing instruction node on line %d.": 1
+  },
+  "distinct_diagnostic_templates": 4,
+  "input_len": {
+    "min": 0,
+    "max": 148,
+    "mean": 11.5,
+    "median": 8.0
+  },
+  "duration_ms": {
+    "mean": 4.37,
+    "max": 6.84
+  },
+  "structure": {
+    "productions_hit": 7,
+    "productions_total": 27,
+    "boundaries": {
+      "name_len": {
+        "max": 0,
+        "p50": 0,
+        "p90": 0,
+        "distinct": 1
+      },
+      "attrs_per_element": {
+        "max": 0,
+        "p50": 0,
+        "p90": 0,
+        "distinct": 1
+      },
+      "entity_name_len": {
+        "max": 0,
+        "p50": 0,
+        "p90": 0,
+        "distinct": 1
+      },
+      "attr_value_len": {
+        "max": 0,
+        "p50": 0,
+        "p90": 0,
+        "distinct": 1
+      },
+      "depth": {
+        "max": 1,
+        "p50": 0,
+        "p90": 0,
+        "distinct": 2
+      }
+    },
+    "hit": {
+      "g_element_paired": 2,
+      "g_chardata": 494,
+      "g_pi": 1,
+      "x_empty_elem_name": 2,
+      "x_rootless": 498,
+      "x_control_char": 164,
+      "x_unterminated": 1
+    },
+    "missing": [
+      "g_prolog",
+      "g_element_selfclose",
+      "g_attribute_dquot",
+      "g_attribute_squot",
+      "g_entity_named",
+      "g_charref_dec",
+      "g_charref_hex",
+      "g_cdata",
+      "g_comment",
+      "g_nesting_deep",
+      "x_attribute_unquoted",
+      "x_doctype",
+      "x_name_nonascii",
+      "x_mismatched_tags",
+      "x_entity_unsupported",
+      "x_multiple_roots",
+      "x_bom",
+      "x_invalid_utf8",
+      "x_embedded_nul",
+      "x_encoding_decl"
+    ],
+    "depth_histogram": {
+      "0": 498,
+      "1": 2
+    },
+    "max_depth_seen": 1
+  },
+  "crash_groups": {},
+  "shrunk_failure": null,
+  "corpus": {
+    "file": "corpus.jsonl.gz",
+    "count": 500,
+    "raw_bytes": 5745,
+    "stored_bytes": 13967,
+    "corpus_digest": "611a2e739891fe5a"
+  }
+}

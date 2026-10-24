@@ -1,0 +1,971 @@
+[
+  {
+    "cell": "ablation-v2-sonnet/iter-0",
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "trials": [
+      {
+        "seed": 11,
+        "parser_pct": 44.3,
+        "parser_lines_covered": 369,
+        "acceptance": 0.514,
+        "diagnostics": 16,
+        "productions": 26,
+        "crashes": 0,
+        "well_formed": 0.464,
+        "near_miss": 0.14,
+        "byte_hostile": 0.396
+      },
+      {
+        "seed": 22,
+        "parser_pct": 44.78,
+        "parser_lines_covered": 373,
+        "acceptance": 0.422,
+        "diagnostics": 17,
+        "productions": 26,
+        "crashes": 0,
+        "well_formed": 0.396,
+        "near_miss": 0.16,
+        "byte_hostile": 0.444
+      },
+      {
+        "seed": 33,
+        "parser_pct": 42.74,
+        "parser_lines_covered": 356,
+        "acceptance": 0.554,
+        "diagnostics": 15,
+        "productions": 26,
+        "crashes": 0,
+        "well_formed": 0.476,
+        "near_miss": 0.058,
+        "byte_hostile": 0.466
+      }
+    ],
+    "parser_pct_mean": 43.94,
+    "parser_pct_stdev": 1.07,
+    "parser_pct_min": 42.74,
+    "parser_pct_max": 44.78,
+    "crashes": 0
+  },
+  {
+    "cell": "loop/iter-0",
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "trials": [
+      {
+        "seed": 11,
+        "parser_pct": 39.26,
+        "parser_lines_covered": 327,
+        "acceptance": 0.288,
+        "diagnostics": 12,
+        "productions": 23,
+        "crashes": 0,
+        "well_formed": 0.618,
+        "near_miss": 0.188,
+        "byte_hostile": 0.194
+      },
+      {
+        "seed": 22,
+        "parser_pct": 38.18,
+        "parser_lines_covered": 318,
+        "acceptance": 0.294,
+        "diagnostics": 12,
+        "productions": 23,
+        "crashes": 0,
+        "well_formed": 0.696,
+        "near_miss": 0.206,
+        "byte_hostile": 0.098
+      },
+      {
+        "seed": 33,
+        "parser_pct": 38.54,
+        "parser_lines_covered": 321,
+        "acceptance": 0.308,
+        "diagnostics": 11,
+        "productions": 23,
+        "crashes": 0,
+        "well_formed": 0.62,
+        "near_miss": 0.306,
+        "byte_hostile": 0.074
+      }
+    ],
+    "parser_pct_mean": 38.66,
+    "parser_pct_stdev": 0.55,
+    "parser_pct_min": 38.18,
+    "parser_pct_max": 39.26,
+    "crashes": 0
+  },
+  {
+    "cell": "loop/iter-1",
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "trials": [
+      {
+        "seed": 11,
+        "parser_pct": 39.74,
+        "parser_lines_covered": 331,
+        "acceptance": 0.446,
+        "diagnostics": 14,
+        "productions": 22,
+        "crashes": 0,
+        "well_formed": 0.642,
+        "near_miss": 0.162,
+        "byte_hostile": 0.196
+      },
+      {
+        "seed": 22,
+        "parser_pct": 39.5,
+        "parser_lines_covered": 329,
+        "acceptance": 0.35,
+        "diagnostics": 14,
+        "productions": 23,
+        "crashes": 0,
+        "well_formed": 0.744,
+        "near_miss": 0.13,
+        "byte_hostile": 0.126
+      },
+      {
+        "seed": 33,
+        "parser_pct": 40.1,
+        "parser_lines_covered": 334,
+        "acceptance": 0.284,
+        "diagnostics": 14,
+        "productions": 23,
+        "crashes": 0,
+        "well_formed": 0.666,
+        "near_miss": 0.19,
+        "byte_hostile": 0.144
+      }
+    ],
+    "parser_pct_mean": 39.78,
+    "parser_pct_stdev": 0.3,
+    "parser_pct_min": 39.5,
+    "parser_pct_max": 40.1,
+    "crashes": 0
+  },
+  {
+    "cell": "loop/iter-2",
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "trials": [
+      {
+        "seed": 11,
+        "parser_pct": 39.98,
+        "parser_lines_covered": 333,
+        "acceptance": 0.414,
+        "diagnostics": 16,
+        "productions": 22,
+        "crashes": 0,
+        "well_formed": 0.716,
+        "near_miss": 0.238,
+        "byte_hostile": 0.046
+      },
+      {
+        "seed": 22,
+        "parser_pct": 40.22,
+        "parser_lines_covered": 335,
+        "acceptance": 0.416,
+        "diagnostics": 15,
+        "productions": 23,
+        "crashes": 0,
+        "well_formed": 0.734,
+        "near_miss": 0.228,
+        "byte_hostile": 0.038
+      },
+      {
+        "seed": 33,
+        "parser_pct": 40.34,
+        "parser_lines_covered": 336,
+        "acceptance": 0.344,
+        "diagnostics": 15,
+        "productions": 23,
+        "crashes": 0,
+        "well_formed": 0.614,
+        "near_miss": 0.314,
+        "byte_hostile": 0.072
+      }
+    ],
+    "parser_pct_mean": 40.18,
+    "parser_pct_stdev": 0.18,
+    "parser_pct_min": 39.98,
+    "parser_pct_max": 40.34,
+    "crashes": 0
+  },
+  {
+    "cell": "loop/iter-3",
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "trials": [
+      {
+        "seed": 11,
+        "parser_pct": 39.98,
+        "parser_lines_covered": 333,
+        "acceptance": 0.45,
+        "diagnostics": 13,
+        "productions": 24,
+        "crashes": 0,
+        "well_formed": 0.744,
+        "near_miss": 0.222,
+        "byte_hostile": 0.034
+      },
+      {
+        "seed": 22,
+        "parser_pct": 39.86,
+        "parser_lines_covered": 332,
+        "acceptance": 0.44,
+        "diagnostics": 14,
+        "productions": 25,
+        "crashes": 0,
+        "well_formed": 0.688,
+        "near_miss": 0.282,
+        "byte_hostile": 0.03
+      },
+      {
+        "seed": 33,
+        "parser_pct": 39.62,
+        "parser_lines_covered": 330,
+        "acceptance": 0.436,
+        "diagnostics": 14,
+        "productions": 25,
+        "crashes": 0,
+        "well_formed": 0.768,
+        "near_miss": 0.212,
+        "byte_hostile": 0.02
+      }
+    ],
+    "parser_pct_mean": 39.82,
+    "parser_pct_stdev": 0.18,
+    "parser_pct_min": 39.62,
+    "parser_pct_max": 39.98,
+    "crashes": 0
+  },
+  {
+    "cell": "loop/iter-4",
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "trials": [
+      {
+        "seed": 11,
+        "parser_pct": 39.74,
+        "parser_lines_covered": 331,
+        "acceptance": 0.456,
+        "diagnostics": 15,
+        "productions": 24,
+        "crashes": 0,
+        "well_formed": 0.742,
+        "near_miss": 0.218,
+        "byte_hostile": 0.04
+      },
+      {
+        "seed": 22,
+        "parser_pct": 39.62,
+        "parser_lines_covered": 330,
+        "acceptance": 0.534,
+        "diagnostics": 14,
+        "productions": 23,
+        "crashes": 0,
+        "well_formed": 0.722,
+        "near_miss": 0.262,
+        "byte_hostile": 0.016
+      },
+      {
+        "seed": 33,
+        "parser_pct": 39.14,
+        "parser_lines_covered": 326,
+        "acceptance": 0.46,
+        "diagnostics": 13,
+        "productions": 23,
+        "crashes": 0,
+        "well_formed": 0.79,
+        "near_miss": 0.204,
+        "byte_hostile": 0.006
+      }
+    ],
+    "parser_pct_mean": 39.5,
+    "parser_pct_stdev": 0.32,
+    "parser_pct_min": 39.14,
+    "parser_pct_max": 39.74,
+    "crashes": 0
+  },
+  {
+    "cell": "loop-b/iter-0",
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "trials": [
+      {
+        "seed": 11,
+        "parser_pct": 44.3,
+        "parser_lines_covered": 369,
+        "acceptance": 0.516,
+        "diagnostics": 16,
+        "productions": 27,
+        "crashes": 0,
+        "well_formed": 0.604,
+        "near_miss": 0.204,
+        "byte_hostile": 0.192
+      },
+      {
+        "seed": 22,
+        "parser_pct": 44.78,
+        "parser_lines_covered": 373,
+        "acceptance": 0.434,
+        "diagnostics": 16,
+        "productions": 26,
+        "crashes": 0,
+        "well_formed": 0.636,
+        "near_miss": 0.146,
+        "byte_hostile": 0.218
+      },
+      {
+        "seed": 33,
+        "parser_pct": 45.62,
+        "parser_lines_covered": 380,
+        "acceptance": 0.506,
+        "diagnostics": 17,
+        "productions": 27,
+        "crashes": 0,
+        "well_formed": 0.63,
+        "near_miss": 0.132,
+        "byte_hostile": 0.238
+      }
+    ],
+    "parser_pct_mean": 44.9,
+    "parser_pct_stdev": 0.67,
+    "parser_pct_min": 44.3,
+    "parser_pct_max": 45.62,
+    "crashes": 0
+  },
+  {
+    "cell": "loop-b/iter-1",
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "trials": [
+      {
+        "seed": 11,
+        "parser_pct": 44.54,
+        "parser_lines_covered": 371,
+        "acceptance": 0.436,
+        "diagnostics": 16,
+        "productions": 27,
+        "crashes": 0,
+        "well_formed": 0.58,
+        "near_miss": 0.182,
+        "byte_hostile": 0.238
+      },
+      {
+        "seed": 22,
+        "parser_pct": 45.02,
+        "parser_lines_covered": 375,
+        "acceptance": 0.462,
+        "diagnostics": 14,
+        "productions": 26,
+        "crashes": 0,
+        "well_formed": 0.564,
+        "near_miss": 0.182,
+        "byte_hostile": 0.254
+      },
+      {
+        "seed": 33,
+        "parser_pct": 46.82,
+        "parser_lines_covered": 390,
+        "acceptance": 0.47,
+        "diagnostics": 17,
+        "productions": 27,
+        "crashes": 0,
+        "well_formed": 0.586,
+        "near_miss": 0.172,
+        "byte_hostile": 0.242
+      }
+    ],
+    "parser_pct_mean": 45.46,
+    "parser_pct_stdev": 1.2,
+    "parser_pct_min": 44.54,
+    "parser_pct_max": 46.82,
+    "crashes": 0
+  },
+  {
+    "cell": "loop-c/iter-0",
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "trials": [
+      {
+        "seed": 11,
+        "parser_pct": 41.18,
+        "parser_lines_covered": 343,
+        "acceptance": 0.178,
+        "diagnostics": 14,
+        "productions": 25,
+        "crashes": 0,
+        "well_formed": 0.392,
+        "near_miss": 0.37,
+        "byte_hostile": 0.238
+      },
+      {
+        "seed": 22,
+        "parser_pct": 43.34,
+        "parser_lines_covered": 361,
+        "acceptance": 0.234,
+        "diagnostics": 18,
+        "productions": 26,
+        "crashes": 0,
+        "well_formed": 0.388,
+        "near_miss": 0.286,
+        "byte_hostile": 0.326
+      },
+      {
+        "seed": 33,
+        "parser_pct": 40.94,
+        "parser_lines_covered": 341,
+        "acceptance": 0.242,
+        "diagnostics": 14,
+        "productions": 26,
+        "crashes": 0,
+        "well_formed": 0.39,
+        "near_miss": 0.266,
+        "byte_hostile": 0.344
+      }
+    ],
+    "parser_pct_mean": 41.82,
+    "parser_pct_stdev": 1.32,
+    "parser_pct_min": 40.94,
+    "parser_pct_max": 43.34,
+    "crashes": 0
+  },
+  {
+    "cell": "loop-c/iter-1",
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "trials": [
+      {
+        "seed": 11,
+        "parser_pct": 43.34,
+        "parser_lines_covered": 361,
+        "acceptance": 0.422,
+        "diagnostics": 15,
+        "productions": 26,
+        "crashes": 0,
+        "well_formed": 0.486,
+        "near_miss": 0.222,
+        "byte_hostile": 0.292
+      },
+      {
+        "seed": 22,
+        "parser_pct": 43.82,
+        "parser_lines_covered": 365,
+        "acceptance": 0.336,
+        "diagnostics": 18,
+        "productions": 26,
+        "crashes": 0,
+        "well_formed": 0.45,
+        "near_miss": 0.124,
+        "byte_hostile": 0.426
+      },
+      {
+        "seed": 33,
+        "parser_pct": 42.74,
+        "parser_lines_covered": 356,
+        "acceptance": 0.324,
+        "diagnostics": 17,
+        "productions": 26,
+        "crashes": 0,
+        "well_formed": 0.434,
+        "near_miss": 0.096,
+        "byte_hostile": 0.47
+      }
+    ],
+    "parser_pct_mean": 43.3,
+    "parser_pct_stdev": 0.54,
+    "parser_pct_min": 42.74,
+    "parser_pct_max": 43.82,
+    "crashes": 0
+  },
+  {
+    "cell": "loop-c/iter-2",
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "trials": [
+      {
+        "seed": 11,
+        "parser_pct": 44.18,
+        "parser_lines_covered": 368,
+        "acceptance": 0.34,
+        "diagnostics": 18,
+        "productions": 26,
+        "crashes": 0,
+        "well_formed": 0.522,
+        "near_miss": 0.146,
+        "byte_hostile": 0.332
+      },
+      {
+        "seed": 22,
+        "parser_pct": 44.06,
+        "parser_lines_covered": 367,
+        "acceptance": 0.32,
+        "diagnostics": 19,
+        "productions": 24,
+        "crashes": 0,
+        "well_formed": 0.5,
+        "near_miss": 0.064,
+        "byte_hostile": 0.436
+      },
+      {
+        "seed": 33,
+        "parser_pct": 42.98,
+        "parser_lines_covered": 358,
+        "acceptance": 0.374,
+        "diagnostics": 16,
+        "productions": 27,
+        "crashes": 0,
+        "well_formed": 0.514,
+        "near_miss": 0.166,
+        "byte_hostile": 0.32
+      }
+    ],
+    "parser_pct_mean": 43.74,
+    "parser_pct_stdev": 0.66,
+    "parser_pct_min": 42.98,
+    "parser_pct_max": 44.18,
+    "crashes": 0
+  },
+  {
+    "cell": "loop-c/iter-3",
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "trials": [
+      {
+        "seed": 11,
+        "parser_pct": 42.98,
+        "parser_lines_covered": 358,
+        "acceptance": 0.424,
+        "diagnostics": 17,
+        "productions": 26,
+        "crashes": 0,
+        "well_formed": 0.602,
+        "near_miss": 0.076,
+        "byte_hostile": 0.322
+      },
+      {
+        "seed": 22,
+        "parser_pct": 42.02,
+        "parser_lines_covered": 350,
+        "acceptance": 0.41,
+        "diagnostics": 16,
+        "productions": 26,
+        "crashes": 0,
+        "well_formed": 0.516,
+        "near_miss": 0.062,
+        "byte_hostile": 0.422
+      },
+      {
+        "seed": 33,
+        "parser_pct": 44.66,
+        "parser_lines_covered": 372,
+        "acceptance": 0.4,
+        "diagnostics": 17,
+        "productions": 26,
+        "crashes": 0,
+        "well_formed": 0.604,
+        "near_miss": 0.138,
+        "byte_hostile": 0.258
+      }
+    ],
+    "parser_pct_mean": 43.22,
+    "parser_pct_stdev": 1.34,
+    "parser_pct_min": 42.02,
+    "parser_pct_max": 44.66,
+    "crashes": 0
+  },
+  {
+    "cell": "loop-c/iter-4",
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "trials": [
+      {
+        "seed": 11,
+        "parser_pct": 43.58,
+        "parser_lines_covered": 363,
+        "acceptance": 0.458,
+        "diagnostics": 19,
+        "productions": 27,
+        "crashes": 0,
+        "well_formed": 0.542,
+        "near_miss": 0.12,
+        "byte_hostile": 0.338
+      },
+      {
+        "seed": 22,
+        "parser_pct": 45.02,
+        "parser_lines_covered": 375,
+        "acceptance": 0.386,
+        "diagnostics": 17,
+        "productions": 27,
+        "crashes": 0,
+        "well_formed": 0.478,
+        "near_miss": 0.116,
+        "byte_hostile": 0.406
+      },
+      {
+        "seed": 33,
+        "parser_pct": 40.58,
+        "parser_lines_covered": 338,
+        "acceptance": 0.382,
+        "diagnostics": 13,
+        "productions": 26,
+        "crashes": 0,
+        "well_formed": 0.514,
+        "near_miss": 0.092,
+        "byte_hostile": 0.394
+      }
+    ],
+    "parser_pct_mean": 43.06,
+    "parser_pct_stdev": 2.27,
+    "parser_pct_min": 40.58,
+    "parser_pct_max": 45.02,
+    "crashes": 0
+  },
+  {
+    "cell": "loop-d/iter-0",
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "trials": [
+      {
+        "seed": 11,
+        "parser_pct": 40.34,
+        "parser_lines_covered": 336,
+        "acceptance": 0.318,
+        "diagnostics": 13,
+        "productions": 27,
+        "crashes": 0,
+        "well_formed": 0.266,
+        "near_miss": 0.156,
+        "byte_hostile": 0.578
+      },
+      {
+        "seed": 22,
+        "parser_pct": 41.54,
+        "parser_lines_covered": 346,
+        "acceptance": 0.358,
+        "diagnostics": 15,
+        "productions": 27,
+        "crashes": 0,
+        "well_formed": 0.28,
+        "near_miss": 0.102,
+        "byte_hostile": 0.618
+      },
+      {
+        "seed": 33,
+        "parser_pct": 40.46,
+        "parser_lines_covered": 337,
+        "acceptance": 0.31,
+        "diagnostics": 15,
+        "productions": 26,
+        "crashes": 0,
+        "well_formed": 0.296,
+        "near_miss": 0.126,
+        "byte_hostile": 0.578
+      }
+    ],
+    "parser_pct_mean": 40.78,
+    "parser_pct_stdev": 0.66,
+    "parser_pct_min": 40.34,
+    "parser_pct_max": 41.54,
+    "crashes": 0
+  },
+  {
+    "cell": "loop-e/iter-0",
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "trials": [
+      {
+        "seed": 11,
+        "parser_pct": 40.82,
+        "parser_lines_covered": 340,
+        "acceptance": 0.462,
+        "diagnostics": 11,
+        "productions": 26,
+        "crashes": 0,
+        "well_formed": 0.462,
+        "near_miss": 0.09,
+        "byte_hostile": 0.448
+      },
+      {
+        "seed": 22,
+        "parser_pct": 40.1,
+        "parser_lines_covered": 334,
+        "acceptance": 0.43,
+        "diagnostics": 11,
+        "productions": 26,
+        "crashes": 0,
+        "well_formed": 0.508,
+        "near_miss": 0.09,
+        "byte_hostile": 0.402
+      },
+      {
+        "seed": 33,
+        "parser_pct": 40.46,
+        "parser_lines_covered": 337,
+        "acceptance": 0.428,
+        "diagnostics": 14,
+        "productions": 27,
+        "crashes": 0,
+        "well_formed": 0.436,
+        "near_miss": 0.132,
+        "byte_hostile": 0.432
+      }
+    ],
+    "parser_pct_mean": 40.46,
+    "parser_pct_stdev": 0.36,
+    "parser_pct_min": 40.1,
+    "parser_pct_max": 40.82,
+    "crashes": 0
+  },
+  {
+    "cell": "loop-f/iter-0",
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "trials": [
+      {
+        "seed": 11,
+        "parser_pct": 40.34,
+        "parser_lines_covered": 336,
+        "acceptance": 0.294,
+        "diagnostics": 14,
+        "productions": 26,
+        "crashes": 0,
+        "well_formed": 0.478,
+        "near_miss": 0.15,
+        "byte_hostile": 0.372
+      },
+      {
+        "seed": 22,
+        "parser_pct": 39.38,
+        "parser_lines_covered": 328,
+        "acceptance": 0.268,
+        "diagnostics": 14,
+        "productions": 26,
+        "crashes": 0,
+        "well_formed": 0.468,
+        "near_miss": 0.146,
+        "byte_hostile": 0.386
+      },
+      {
+        "seed": 33,
+        "parser_pct": 40.1,
+        "parser_lines_covered": 334,
+        "acceptance": 0.32,
+        "diagnostics": 13,
+        "productions": 26,
+        "crashes": 0,
+        "well_formed": 0.53,
+        "near_miss": 0.144,
+        "byte_hostile": 0.326
+      }
+    ],
+    "parser_pct_mean": 39.94,
+    "parser_pct_stdev": 0.5,
+    "parser_pct_min": 39.38,
+    "parser_pct_max": 40.34,
+    "crashes": 0
+  },
+  {
+    "cell": "loop-f/iter-1",
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "trials": [
+      {
+        "seed": 11,
+        "parser_pct": 41.66,
+        "parser_lines_covered": 347,
+        "acceptance": 0.25,
+        "diagnostics": 15,
+        "productions": 27,
+        "crashes": 0,
+        "well_formed": 0.47,
+        "near_miss": 0.134,
+        "byte_hostile": 0.396
+      },
+      {
+        "seed": 22,
+        "parser_pct": 41.54,
+        "parser_lines_covered": 346,
+        "acceptance": 0.374,
+        "diagnostics": 14,
+        "productions": 25,
+        "crashes": 0,
+        "well_formed": 0.47,
+        "near_miss": 0.042,
+        "byte_hostile": 0.488
+      },
+      {
+        "seed": 33,
+        "parser_pct": 40.7,
+        "parser_lines_covered": 339,
+        "acceptance": 0.35,
+        "diagnostics": 15,
+        "productions": 26,
+        "crashes": 0,
+        "well_formed": 0.588,
+        "near_miss": 0.094,
+        "byte_hostile": 0.318
+      }
+    ],
+    "parser_pct_mean": 41.3,
+    "parser_pct_stdev": 0.52,
+    "parser_pct_min": 40.7,
+    "parser_pct_max": 41.66,
+    "crashes": 0
+  },
+  {
+    "cell": "loop-f/iter-2",
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "trials": [
+      {
+        "seed": 11,
+        "parser_pct": 41.66,
+        "parser_lines_covered": 347,
+        "acceptance": 0.4,
+        "diagnostics": 15,
+        "productions": 27,
+        "crashes": 0,
+        "well_formed": 0.496,
+        "near_miss": 0.136,
+        "byte_hostile": 0.368
+      },
+      {
+        "seed": 22,
+        "parser_pct": 39.62,
+        "parser_lines_covered": 330,
+        "acceptance": 0.318,
+        "diagnostics": 14,
+        "productions": 24,
+        "crashes": 0,
+        "well_formed": 0.46,
+        "near_miss": 0.128,
+        "byte_hostile": 0.412
+      },
+      {
+        "seed": 33,
+        "parser_pct": 42.62,
+        "parser_lines_covered": 355,
+        "acceptance": 0.332,
+        "diagnostics": 18,
+        "productions": 26,
+        "crashes": 0,
+        "well_formed": 0.47,
+        "near_miss": 0.186,
+        "byte_hostile": 0.344
+      }
+    ],
+    "parser_pct_mean": 41.3,
+    "parser_pct_stdev": 1.53,
+    "parser_pct_min": 39.62,
+    "parser_pct_max": 42.62,
+    "crashes": 0
+  },
+  {
+    "cell": "loop-f/iter-3",
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "trials": [
+      {
+        "seed": 11,
+        "parser_pct": 42.86,
+        "parser_lines_covered": 357,
+        "acceptance": 0.466,
+        "diagnostics": 19,
+        "productions": 27,
+        "crashes": 0,
+        "well_formed": 0.564,
+        "near_miss": 0.082,
+        "byte_hostile": 0.354
+      },
+      {
+        "seed": 22,
+        "parser_pct": 41.78,
+        "parser_lines_covered": 348,
+        "acceptance": 0.39,
+        "diagnostics": 16,
+        "productions": 26,
+        "crashes": 0,
+        "well_formed": 0.562,
+        "near_miss": 0.162,
+        "byte_hostile": 0.276
+      },
+      {
+        "seed": 33,
+        "parser_pct": 39.98,
+        "parser_lines_covered": 333,
+        "acceptance": 0.38,
+        "diagnostics": 16,
+        "productions": 25,
+        "crashes": 0,
+        "well_formed": 0.496,
+        "near_miss": 0.142,
+        "byte_hostile": 0.362
+      }
+    ],
+    "parser_pct_mean": 41.54,
+    "parser_pct_stdev": 1.45,
+    "parser_pct_min": 39.98,
+    "parser_pct_max": 42.86,
+    "crashes": 0
+  }
+]

@@ -1,0 +1,83 @@
+{
+  "run_id": "loop-f",
+  "backend": "cli",
+  "model": "(backend default)",
+  "prompt_set": "v5",
+  "seed_model": "sonnet",
+  "refine_model": "sonnet",
+  "max_examples": 500,
+  "iterations": [
+    {
+      "iteration": 0,
+      "strategy": "gen_iter0",
+      "acceptance_rate": 0.438,
+      "productions_hit": 26,
+      "productions_total": 27,
+      "productions_missing": [
+        "x_unterminated"
+      ],
+      "max_depth": 3500,
+      "distinct_diagnostic_templates": 12,
+      "crash_count": 0,
+      "crash_groups": [],
+      "cost_usd_cumulative": 1.3403
+    },
+    {
+      "iteration": 1,
+      "strategy": "gen_iter1",
+      "acceptance_rate": 0.388,
+      "productions_hit": 25,
+      "productions_total": 27,
+      "productions_missing": [
+        "g_entity_named",
+        "x_unterminated"
+      ],
+      "max_depth": 5000,
+      "distinct_diagnostic_templates": 13,
+      "crash_count": 0,
+      "crash_groups": [],
+      "cost_usd_cumulative": 2.4024
+    },
+    {
+      "iteration": 2,
+      "strategy": "gen_iter2",
+      "acceptance_rate": 0.424,
+      "productions_hit": 27,
+      "productions_total": 27,
+      "productions_missing": [],
+      "max_depth": 17000,
+      "distinct_diagnostic_templates": 15,
+      "crash_count": 0,
+      "crash_groups": [],
+      "cost_usd_cumulative": 3.025
+    },
+    {
+      "iteration": 3,
+      "strategy": "gen_iter3",
+      "acceptance_rate": 0.634,
+      "productions_hit": 25,
+      "productions_total": 27,
+      "productions_missing": [
+        "x_multiple_roots",
+        "x_unterminated"
+      ],
+      "max_depth": 16500,
+      "distinct_diagnostic_templates": 15,
+      "crash_count": 0,
+      "crash_groups": [],
+      "cost_usd_cumulative": 5.4528
+    }
+  ],
+  "budget": {
+    "llm_calls": 7,
+    "input_tokens": 18,
+    "output_tokens": 477912,
+    "billable_input_tokens": 308121,
+    "authored_prompt_chars": 195832,
+    "authored_prompt_tokens_est": 48958,
+    "cost_usd": 5.4528,
+    "max_usd": 5.0
+  },
+  "stopped_early": null,
+  "resumed_from": 1
+}

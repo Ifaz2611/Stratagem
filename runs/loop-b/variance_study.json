@@ -1,0 +1,66 @@
+[
+  {
+    "iteration": 0,
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "acceptance_pct": [
+      51.800000000000004,
+      48.0,
+      41.8
+    ],
+    "diagnostics": [
+      14,
+      16,
+      16
+    ],
+    "max_depth": [
+      108,
+      96,
+      186
+    ],
+    "productions": [
+      27,
+      27,
+      27
+    ],
+    "acceptance_mean": 47.2,
+    "acceptance_stdev": 5.05,
+    "diagnostics_mean": 15.33,
+    "diagnostics_stdev": 1.15
+  },
+  {
+    "iteration": 1,
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "acceptance_pct": [
+      52.400000000000006,
+      44.800000000000004,
+      53.6
+    ],
+    "diagnostics": [
+      14,
+      14,
+      15
+    ],
+    "max_depth": [
+      904,
+      582,
+      698
+    ],
+    "productions": [
+      27,
+      26,
+      27
+    ],
+    "acceptance_mean": 50.27,
+    "acceptance_stdev": 4.77,
+    "diagnostics_mean": 14.33,
+    "diagnostics_stdev": 0.58
+  }
+]

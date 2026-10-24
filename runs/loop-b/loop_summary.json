@@ -1,0 +1,49 @@
+{
+  "run_id": "loop-b",
+  "backend": "cli",
+  "model": "(backend default)",
+  "prompt_set": "v2",
+  "seed_model": "opus",
+  "refine_model": "sonnet",
+  "max_examples": 500,
+  "iterations": [
+    {
+      "iteration": 0,
+      "strategy": "gen_iter0",
+      "acceptance_rate": 0.448,
+      "productions_hit": 23,
+      "productions_total": 23,
+      "productions_missing": [],
+      "max_depth": 211,
+      "distinct_diagnostic_templates": 13,
+      "crash_count": 0,
+      "crash_groups": [],
+      "cost_usd_cumulative": 1.2046
+    },
+    {
+      "iteration": 1,
+      "strategy": "gen_iter1",
+      "acceptance_rate": 0.518,
+      "productions_hit": 23,
+      "productions_total": 23,
+      "productions_missing": [],
+      "max_depth": 669,
+      "distinct_diagnostic_templates": 13,
+      "crash_count": 0,
+      "crash_groups": [],
+      "cost_usd_cumulative": 1.8391
+    }
+  ],
+  "budget": {
+    "llm_calls": 2,
+    "input_tokens": 4,
+    "output_tokens": 92548,
+    "billable_input_tokens": 44776,
+    "authored_prompt_chars": 36037,
+    "authored_prompt_tokens_est": 9009,
+    "cost_usd": 1.8391,
+    "max_usd": 2.5
+  },
+  "stopped_early": "LLMError: claude CLI exited 1: ",
+  "resumed_from": null
+}

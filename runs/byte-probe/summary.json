@@ -1,0 +1,118 @@
+{
+  "strategy": "byte_probe",
+  "mode": "survey",
+  "random_seed": null,
+  "examples": 8,
+  "wall_clock_s": 0.11,
+  "outcomes": {
+    "rejected": 3,
+    "parsed_clean": 5
+  },
+  "acceptance_rate": 0.625,
+  "buckets": {
+    "byte_hostile": {
+      "n": 8,
+      "accepted": 5,
+      "share": 1.0,
+      "acceptance_rate": 0.625
+    }
+  },
+  "crash_count": 0,
+  "unique_crash_inputs": 0,
+  "xml_shaped_rate": 0.5,
+  "diagnostic_templates": {},
+  "distinct_diagnostic_templates": 0,
+  "input_len": {
+    "min": 5,
+    "max": 43,
+    "mean": 12.6,
+    "median": 9.0
+  },
+  "duration_ms": {
+    "mean": 9.62,
+    "max": 12.41
+  },
+  "structure": {
+    "productions_hit": 11,
+    "productions_total": 27,
+    "boundaries": {
+      "name_len": {
+        "max": 3,
+        "p50": 1,
+        "p90": 3,
+        "distinct": 3
+      },
+      "attrs_per_element": {
+        "max": 0,
+        "p50": 0,
+        "p90": 0,
+        "distinct": 1
+      },
+      "entity_name_len": {
+        "max": 0,
+        "p50": 0,
+        "p90": 0,
+        "distinct": 1
+      },
+      "attr_value_len": {
+        "max": 0,
+        "p50": 0,
+        "p90": 0,
+        "distinct": 1
+      },
+      "depth": {
+        "max": 1,
+        "p50": 1,
+        "p90": 1,
+        "distinct": 2
+      }
+    },
+    "hit": {
+      "g_prolog": 1,
+      "g_element_paired": 5,
+      "g_element_selfclose": 2,
+      "g_attribute_dquot": 1,
+      "g_chardata": 7,
+      "x_rootless": 1,
+      "x_control_char": 4,
+      "x_bom": 4,
+      "x_invalid_utf8": 5,
+      "x_embedded_nul": 4,
+      "x_encoding_decl": 1
+    },
+    "missing": [
+      "g_attribute_squot",
+      "g_entity_named",
+      "g_charref_dec",
+      "g_charref_hex",
+      "g_cdata",
+      "g_comment",
+      "g_pi",
+      "g_nesting_deep",
+      "x_attribute_unquoted",
+      "x_doctype",
+      "x_empty_elem_name",
+      "x_name_nonascii",
+      "x_mismatched_tags",
+      "x_entity_unsupported",
+      "x_multiple_roots",
+      "x_unterminated"
+    ],
+    "depth_histogram": {
+      "0": 3,
+      "1": 5
+    },
+    "max_depth_seen": 1
+  },
+  "crash_groups": {},
+  "shrunk_failure": null,
+  "wall_clock_cap_s": 600,
+  "wall_clock_cap_reached": false,
+  "corpus": {
+    "file": "corpus.jsonl.gz",
+    "count": 8,
+    "raw_bytes": 101,
+    "stored_bytes": 315,
+    "corpus_digest": "2ecc759b62f89e44"
+  }
+}

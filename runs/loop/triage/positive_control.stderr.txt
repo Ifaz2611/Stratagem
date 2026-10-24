@@ -1,0 +1,53 @@
+=================================================================
+==1895653==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x50c0000000f8 at pc 0x5a5ae511701b bp 0x7fffaaa51510 sp 0x7fffaaa51500
+READ of size 8 at 0x50c0000000f8 thread T0
+    #0 0x5a5ae511701a in index_sort /home/omar/Documents/codes/projects/agent-fuzzing/build/asan/mxml-index.c:394
+    #1 0x5a5ae5117395 in index_sort /home/omar/Documents/codes/projects/agent-fuzzing/build/asan/mxml-index.c:415
+    #2 0x5a5ae5117fc5 in mxmlIndexNew /home/omar/Documents/codes/projects/agent-fuzzing/build/asan/mxml-index.c:268
+    #3 0x5a5ae510c416 in main /home/omar/Documents/codes/projects/agent-fuzzing/harness/harness.c:160
+    #4 0x7c68afe2a1c9 in __libc_start_call_main ../sysdeps/nptl/libc_start_call_main.h:58
+    #5 0x7c68afe2a28a in __libc_start_main_impl ../csu/libc-start.c:360
+    #6 0x5a5ae510b8c4 in _start (/home/omar/Documents/codes/projects/agent-fuzzing/build/asan/harness+0x178c4) (BuildId: bb1632b20e95db435d41592c7b05b9d65e40960d)
+
+0x50c0000000f8 is located 8 bytes before 128-byte region [0x50c000000100,0x50c000000180)
+allocated by thread T0 here:
+    #0 0x7c68b0afc778 in realloc ../../../../src/libsanitizer/asan/asan_malloc_linux.cpp:85
+    #1 0x5a5ae5117eeb in mxmlIndexNew /home/omar/Documents/codes/projects/agent-fuzzing/build/asan/mxml-index.c:250
+    #2 0x5a5ae510c416 in main /home/omar/Documents/codes/projects/agent-fuzzing/harness/harness.c:160
+    #3 0x7c68afe2a1c9 in __libc_start_call_main ../sysdeps/nptl/libc_start_call_main.h:58
+    #4 0x7c68afe2a28a in __libc_start_main_impl ../csu/libc-start.c:360
+    #5 0x5a5ae510b8c4 in _start (/home/omar/Documents/codes/projects/agent-fuzzing/build/asan/harness+0x178c4) (BuildId: bb1632b20e95db435d41592c7b05b9d65e40960d)
+
+SUMMARY: AddressSanitizer: heap-buffer-overflow /home/omar/Documents/codes/projects/agent-fuzzing/build/asan/mxml-index.c:394 in index_sort
+Shadow bytes around the buggy address:
+  0x50bffffffe00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x50bffffffe80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x50bfffffff00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x50bfffffff80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x50c000000000: fa fa fa fa fa fa fa fa 00 00 00 00 00 00 00 00
+=>0x50c000000080: 00 00 00 00 00 00 00 00 fa fa fa fa fa fa fa[fa]
+  0x50c000000100: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x50c000000180: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x50c000000200: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x50c000000280: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x50c000000300: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==1895653==ABORTING

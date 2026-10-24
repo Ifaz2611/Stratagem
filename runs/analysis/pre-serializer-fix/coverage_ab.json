@@ -1,0 +1,23 @@
+{
+  "loop": {
+    "per_iteration": [
+      39.02,
+      40.1,
+      39.98,
+      39.5,
+      39.14
+    ],
+    "union_pct": 40.94,
+    "union_covered": 341,
+    "lines": 833
+  },
+  "loop-b": {
+    "per_iteration": [
+      42.26,
+      41.9
+    ],
+    "union_pct": 43.22,
+    "union_covered": 360,
+    "lines": 833
+  }
+}

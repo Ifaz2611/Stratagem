@@ -1,0 +1,9 @@
+Source:        https://github.com/antlr/grammars-v4
+Path:          xml/XMLLexer.g4, xml/XMLParser.g4
+Pinned commit: e756f2a2ee5565a9300666f100ba6acd874664f7  (2026-07-20)
+Fetched via:   https://raw.githubusercontent.com/antlr/grammars-v4/e756f2a2ee5565a9300666f100ba6acd874664f7/xml
+Fetched by:    scripts/fetch_grammar.sh
+
+sha256:
+  XMLLexer.g4   2d14f11025d66bec1d881caa5a3b15fde81bd35846c05c306694f742897b8762
+  XMLParser.g4  3ad2a88464138a73e821b47bfd6236f456e090e8961b5a91014b4cf31410b5f7

@@ -1,0 +1,52 @@
+{
+  "mxml-file.c": {
+    "pct": 40.94,
+    "lines": 833,
+    "covered": 341
+  },
+  "mxml-node.c": {
+    "pct": 37.7,
+    "lines": 252,
+    "covered": 95
+  },
+  "mxml-attr.c": {
+    "pct": 33.85,
+    "lines": 65,
+    "covered": 22
+  },
+  "mxml-options.c": {
+    "pct": 43.48,
+    "lines": 92,
+    "covered": 40
+  },
+  "mxml-private.c": {
+    "pct": 64.86,
+    "lines": 37,
+    "covered": 24
+  },
+  "mxml-get.c": {
+    "pct": 3.49,
+    "lines": 86,
+    "covered": 3
+  },
+  "mxml-set.c": {
+    "pct": 0.0,
+    "lines": 222,
+    "covered": 0
+  },
+  "mxml-search.c": {
+    "pct": 0.0,
+    "lines": 68,
+    "covered": 0
+  },
+  "mxml-index.c": {
+    "pct": 0.0,
+    "lines": 110,
+    "covered": 0
+  },
+  "_total": {
+    "covered": 525,
+    "lines": 1765,
+    "pct": 29.75
+  }
+}

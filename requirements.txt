@@ -1,0 +1,11 @@
+# Stratagem runtime dependencies.
+#
+# Pinned. Hypothesis's shrinker and its random draw sequence both change between
+# releases, so an unpinned version would quietly change which inputs get
+# generated.
+hypothesis==6.140.3
+
+# Only needed for LLM_BACKEND=openai. The cli and replay backends never import
+# it. One SDK covers OpenAI, Anthropic's OpenAI-compatible layer, local
+# runtimes and gateways, selected by OPENAI_BASE_URL.
+openai==2.14.0

@@ -1,0 +1,162 @@
+[
+  {
+    "iteration": 0,
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "acceptance_pct": [
+      16.2,
+      23.0,
+      26.6
+    ],
+    "diagnostics": [
+      15,
+      15,
+      12
+    ],
+    "max_depth": [
+      2,
+      3,
+      2
+    ],
+    "productions": [
+      26,
+      26,
+      26
+    ],
+    "acceptance_mean": 21.93,
+    "acceptance_stdev": 5.28,
+    "diagnostics_mean": 14,
+    "diagnostics_stdev": 1.73
+  },
+  {
+    "iteration": 1,
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "acceptance_pct": [
+      29.2,
+      39.6,
+      41.199999999999996
+    ],
+    "diagnostics": [
+      17,
+      14,
+      15
+    ],
+    "max_depth": [
+      13,
+      12,
+      3
+    ],
+    "productions": [
+      27,
+      26,
+      26
+    ],
+    "acceptance_mean": 36.67,
+    "acceptance_stdev": 6.52,
+    "diagnostics_mean": 15.33,
+    "diagnostics_stdev": 1.53
+  },
+  {
+    "iteration": 2,
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "acceptance_pct": [
+      46.2,
+      41.0,
+      37.8
+    ],
+    "diagnostics": [
+      15,
+      13,
+      14
+    ],
+    "max_depth": [
+      5,
+      6,
+      14
+    ],
+    "productions": [
+      26,
+      25,
+      26
+    ],
+    "acceptance_mean": 41.67,
+    "acceptance_stdev": 4.24,
+    "diagnostics_mean": 14,
+    "diagnostics_stdev": 1.0
+  },
+  {
+    "iteration": 3,
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "acceptance_pct": [
+      47.4,
+      41.6,
+      43.6
+    ],
+    "diagnostics": [
+      15,
+      17,
+      17
+    ],
+    "max_depth": [
+      6,
+      4,
+      21
+    ],
+    "productions": [
+      26,
+      25,
+      27
+    ],
+    "acceptance_mean": 44.2,
+    "acceptance_stdev": 2.95,
+    "diagnostics_mean": 16.33,
+    "diagnostics_stdev": 1.15
+  },
+  {
+    "iteration": 4,
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "acceptance_pct": [
+      43.0,
+      41.0,
+      42.199999999999996
+    ],
+    "diagnostics": [
+      18,
+      15,
+      14
+    ],
+    "max_depth": [
+      349,
+      377,
+      294
+    ],
+    "productions": [
+      27,
+      27,
+      25
+    ],
+    "acceptance_mean": 42.07,
+    "acceptance_stdev": 1.01,
+    "diagnostics_mean": 15.67,
+    "diagnostics_stdev": 2.08
+  }
+]
