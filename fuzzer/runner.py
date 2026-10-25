@@ -38,6 +38,7 @@ from pathlib import Path
 # Cap each harness invocation so a hang is recorded as a crash instead of
 # stalling the rest of the campaign.
 PER_RUN_TIMEOUT_S = 5.0
+DEFAULT_SLOW_THRESHOLD_S = 1.0
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_HARNESS = REPO_ROOT / "build" / "asan" / "harness"
@@ -94,6 +95,8 @@ class RunResult:
     duration_s: float = 0.0
     input_sha256: str = ""
     input_len: int = 0
+    is_slow: bool = False
+    slow_threshold_s: float | None = None
 
     def to_json(self) -> dict:
         """Compact form for the JSONL log. stderr only kept when it matters."""
@@ -106,6 +109,10 @@ class RunResult:
             "ndiag": len(self.diagnostics),
             "diagnostics": self.diagnostics,
         }
+        if self.is_slow:
+            d["is_slow"] = True
+        if self.outcome == Outcome.TIMEOUT:
+            d["timeout"] = True
         if self.signal_name:
             d["signal"] = self.signal_name
         if self.outcome.is_crash:
@@ -129,6 +136,7 @@ def run_one(
     timeout_s: float = PER_RUN_TIMEOUT_S,
     extra_args: tuple[str, ...] = (),
     target: Any = None,
+    slow_threshold_s: float | None = None,
 ) -> RunResult:
     """Run the harness on one document, fed via stdin.
 
@@ -140,12 +148,22 @@ def run_one(
     if target is not None:
         from fuzzer.targets import get_target
         t = get_target(target)
-        return t.run(document, timeout_s=timeout_s, extra_args=extra_args)
+        return t.run(
+            document,
+            timeout_s=timeout_s,
+            extra_args=extra_args,
+            slow_threshold_s=slow_threshold_s,
+        )
 
     harness_path = Path(harness)
     if not (harness_path.exists() and os.access(str(harness_path), os.X_OK)):
         from fuzzer.targets import get_target
-        return get_target("mxml").run(document, timeout_s=timeout_s, extra_args=extra_args)
+        return get_target("mxml").run(
+            document,
+            timeout_s=timeout_s,
+            extra_args=extra_args,
+            slow_threshold_s=slow_threshold_s,
+        )
 
     env = {**os.environ, **SANITIZER_ENV}
     sha = hashlib.sha256(document).hexdigest()
@@ -161,14 +179,17 @@ def run_one(
             env=env,
         )
     except subprocess.TimeoutExpired as exc:
+        dur = time.monotonic() - started
         return RunResult(
             outcome=Outcome.TIMEOUT,
             returncode=-signal.SIGKILL,
             signal_name="TIMEOUT",
             stderr=(exc.stderr or b"").decode("utf-8", "replace"),
-            duration_s=time.monotonic() - started,
+            duration_s=dur,
             input_sha256=sha,
             input_len=len(document),
+            is_slow=True,
+            slow_threshold_s=slow_threshold_s,
         )
 
     duration = time.monotonic() - started
@@ -200,6 +221,7 @@ def run_one(
         # thing that should be looked at, not swallowed.
         outcome = Outcome.CRASH
 
+    is_slow = slow_threshold_s is not None and duration >= slow_threshold_s
     return RunResult(
         outcome=outcome,
         returncode=rc,
@@ -209,4 +231,6 @@ def run_one(
         duration_s=duration,
         input_sha256=sha,
         input_len=len(document),
+        is_slow=is_slow,
+        slow_threshold_s=slow_threshold_s,
     )

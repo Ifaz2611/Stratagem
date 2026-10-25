@@ -391,6 +391,108 @@ python -m fuzzer.campaign my_strategy \
   --out runs/hunt
 ```
 
+## Advanced Fuzzing Capabilities
+
+### Parallel Fuzzing (`fuzzer/parallel.py`)
+
+Run multiple campaigns concurrently across targets, strategies, or random seeds.
+
+```bash
+# Run multiple targets in parallel
+python -m fuzzer.parallel --strategy baseline --targets mxml json http --workers 3
+
+# Run multiple strategies against one target
+python -m fuzzer.parallel --strategies baseline byte_probe --target mxml --workers 2
+
+# Run multiple trials across random seeds for statistical evaluation
+python -m fuzzer.parallel --strategy baseline --seeds 1 2 3 4 5 --workers 4
+```
+
+Python API:
+```python
+from fuzzer.parallel import ParallelCampaignRunner, CampaignTask, run_parallel_targets
+
+summary = run_parallel_targets(
+    strategy="baseline",
+    targets=["mxml", "json", "http"],
+    max_examples=500,
+    max_workers=3,
+)
+print(f"Completed {summary.completed_campaigns} in {summary.total_wall_clock_s:.2f}s")
+```
+
+### Adaptive Batch Sizes (`fuzzer/batching.py`)
+
+Dynamically adjusts batch size based on strategy feedback:
+- Scales **up** when new crashes, productions, or diagnostic templates are found
+- Scales **up** when within the target acceptance rate window
+- Scales **down** when generating malformed / invalid shape inputs
+- Scales **down** on timeouts or latency spikes
+- Clamped strictly between `min_batch_size` and `max_batch_size`
+
+```bash
+python -m fuzzer.campaign baseline --target mxml --adaptive-batch
+```
+
+Python API:
+```python
+from fuzzer.batching import AdaptiveBatchController, AdaptiveBatchConfig
+
+controller = AdaptiveBatchController(
+    AdaptiveBatchConfig(initial_batch_size=50, min_batch_size=10, max_batch_size=500)
+)
+```
+
+### Intelligent Corpus Management (`fuzzer/corpus.py`)
+
+Provides deduplication, feature tracking, energy-based prioritization, and coverage-guided distillation:
+- **Exact Deduplication**: SHA-256 hash checking prevents redundant storage
+- **Semantic Deduplication**: Filters inputs sharing identical behavior signatures `(outcome, diagnostics, productions)`
+- **Coverage-Guided Distillation**: Greedy Set Cover algorithm selects the minimal subset of inputs that preserves 100% feature coverage
+- **Energy / Priority Scoring**: Rarity of covered productions and diagnostic templates, compactness, and execution speed determine seed weight
+
+```python
+from fuzzer.corpus import CorpusManager
+
+mgr = CorpusManager()
+mgr.add(payload, outcome="parsed_clean", productions=["g_element_paired"])
+
+# Distill corpus to minimal set covering all features
+distilled = mgr.distill()
+distilled.export_corpus(Path("runs/corpus_distilled.jsonl.gz"))
+```
+
+### Timeout & Slow Input Handling
+
+Detects and quarantines pathological inputs:
+- Per-input timeout cap (`timeout_s`, default 5.0s) catches hangs
+- Slow input threshold (`slow_threshold_s`, default 1.0s) tracks high-latency inputs
+- Automatic streak detection halts execution if consecutive hangs occur
+- Artifact isolation:
+  - `timeouts/*.bin` and `timeouts/*.meta.json`
+  - `slow_inputs/*.bin` and `slow_inputs/*.meta.json`
+
+```bash
+python -m fuzzer.campaign baseline --timeout 2.5 --slow-threshold 0.5
+```
+
+### Incremental Campaign Persistence
+
+Safeguards long-running campaigns against interruption:
+- Streaming `results.jsonl` with flush
+- Immediate write of crashes to `crashes/` as they occur
+- Periodic checkpointing (`checkpoint.json`) every `checkpoint_interval` inputs
+- Seamless resumption via `--resume` without losing completed progress
+- Graceful `SIGINT` (Ctrl+C) handling preserving intermediate summaries
+
+```bash
+# Long running test with checkpoints every 25 inputs
+python -m fuzzer.campaign baseline -n 500 --checkpoint-interval 25
+
+# Resume an interrupted campaign
+python -m fuzzer.campaign baseline -n 500 --resume --out runs/my-run
+```
+
 ## Performance Considerations
 
 ### Process Spawning

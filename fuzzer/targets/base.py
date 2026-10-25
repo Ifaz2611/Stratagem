@@ -77,6 +77,7 @@ class BaseTarget(abc.ABC):
         binary_path: Path,
         timeout_s: float = PER_RUN_TIMEOUT_S,
         extra_args: tuple[str, ...] = (),
+        slow_threshold_s: float | None = None,
     ) -> RunResult:
         """Execute a compiled harness binary using the standard line protocol."""
         env = {**os.environ, **SANITIZER_ENV}
@@ -93,14 +94,17 @@ class BaseTarget(abc.ABC):
                 env=env,
             )
         except subprocess.TimeoutExpired as exc:
+            dur = time.monotonic() - started
             return RunResult(
                 outcome=Outcome.TIMEOUT,
                 returncode=-1,
                 signal_name="TIMEOUT",
                 stderr=(exc.stderr or b"").decode("utf-8", "replace"),
-                duration_s=time.monotonic() - started,
+                duration_s=dur,
                 input_sha256=sha,
                 input_len=len(payload),
+                is_slow=True,
+                slow_threshold_s=slow_threshold_s,
             )
 
         duration = time.monotonic() - started
@@ -131,6 +135,7 @@ class BaseTarget(abc.ABC):
         else:
             outcome = Outcome.CRASH
 
+        is_slow = slow_threshold_s is not None and duration >= slow_threshold_s
         return RunResult(
             outcome=outcome,
             returncode=rc,
@@ -140,6 +145,8 @@ class BaseTarget(abc.ABC):
             duration_s=duration,
             input_sha256=sha,
             input_len=len(payload),
+            is_slow=is_slow,
+            slow_threshold_s=slow_threshold_s,
         )
 
     def run_reference(
@@ -160,6 +167,7 @@ class BaseTarget(abc.ABC):
         payload: bytes,
         timeout_s: float = PER_RUN_TIMEOUT_S,
         extra_args: tuple[str, ...] = (),
+        slow_threshold_s: float | None = None,
     ) -> RunResult:
         """Execute input against this target.
 
@@ -167,8 +175,17 @@ class BaseTarget(abc.ABC):
         back to the target's reference runner.
         """
         if self.harness_binary and self.harness_binary.exists() and os.access(str(self.harness_binary), os.X_OK):
-            return self.run_native(payload, self.harness_binary, timeout_s, extra_args)
-        return self.run_reference(payload, timeout_s, extra_args)
+            res = self.run_native(payload, self.harness_binary, timeout_s, extra_args, slow_threshold_s=slow_threshold_s)
+        else:
+            try:
+                res = self.run_reference(payload, timeout_s, extra_args, slow_threshold_s=slow_threshold_s)
+            except TypeError:
+                res = self.run_reference(payload, timeout_s, extra_args)
+
+        if slow_threshold_s is not None and res.duration_s >= slow_threshold_s:
+            res.is_slow = True
+            res.slow_threshold_s = slow_threshold_s
+        return res
 
 
 # Registry of known targets

@@ -597,8 +597,15 @@ def main() -> int:
     test_targets.test_protocol_targets()
     test_targets.test_campaign_with_targets()
 
-    total_passed = _passed + test_targets._passed
-    all_failed = _failed + test_targets._failed
+    from fuzzer import test_improvements
+    test_improvements.test_parallel_fuzzing()
+    test_improvements.test_adaptive_batch_sizing()
+    test_improvements.test_corpus_management()
+    test_improvements.test_timeout_and_slow_inputs()
+    test_improvements.test_incremental_persistence()
+
+    total_passed = _passed + test_targets._passed + test_improvements._passed
+    all_failed = _failed + test_targets._failed + test_improvements._failed
     print(f"passed={total_passed} failed={len(all_failed)}")
     for f in all_failed:
         print(f"  FAIL {f}")

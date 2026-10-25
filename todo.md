@@ -11,11 +11,11 @@ This document outlines potential improvements and new features for Stratagem, th
 - [x] Consider supporting protocol parsers (HTTP, DNS, SMTP)
 
 ### Fuzzer Improvements
-- [ ] Implement parallel fuzzing (multiple campaigns running simultaneously)
-- [ ] Add support for adaptive batch sizes based on strategy performance
-- [ ] Implement intelligent corpus management (deduplication, coverage-guided selection)
-- [ ] Add timeout detection and handling for slow inputs
-- [ ] Implement incremental campaign persistence for long-running tests
+- [x] Implement parallel fuzzing (multiple campaigns running simultaneously)
+- [x] Add support for adaptive batch sizes based on strategy performance
+- [x] Implement intelligent corpus management (deduplication, coverage-guided selection)
+- [x] Add timeout detection and handling for slow inputs
+- [x] Implement incremental campaign persistence for long-running tests
 
 ### Agent Enhancements
 - [ ] Add support for multi-model ensembles (vote on best strategy)
