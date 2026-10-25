@@ -589,10 +589,20 @@ def main() -> int:
     test_replay_offset()
     test_call_grouping()
     test_resume_budget()
-    print(f"passed={_passed} failed={len(_failed)}")
-    for f in _failed:
+
+    from fuzzer import test_targets
+    test_targets.test_target_registry()
+    test_targets.test_xml_targets()
+    test_targets.test_json_target()
+    test_targets.test_protocol_targets()
+    test_targets.test_campaign_with_targets()
+
+    total_passed = _passed + test_targets._passed
+    all_failed = _failed + test_targets._failed
+    print(f"passed={total_passed} failed={len(all_failed)}")
+    for f in all_failed:
         print(f"  FAIL {f}")
-    return 1 if _failed else 0
+    return 1 if all_failed else 0
 
 
 if __name__ == "__main__":

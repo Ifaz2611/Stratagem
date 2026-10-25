@@ -144,6 +144,7 @@ class Loop:
     # a cheaper one for refinement is a reasonable split of a fixed budget.
     seed_model: str | None = None
     refine_model: str | None = None
+    target: str = "mxml"
 
     budget: Budget = field(init=False)
     out: Path = field(init=False)
@@ -174,6 +175,8 @@ class Loop:
         self.directives = self._load_directives()
         self.union_diagnostics: set[str] = set()
         self.union_productions: set[str] = set()
+        from fuzzer.targets import get_target
+        self.target_obj = get_target(self.target)
         self.system = (self.prompts / "system.md").read_text(encoding="utf-8")
 
         # Restore before building the backends: a resumed replay must start at
@@ -557,7 +560,7 @@ class Loop:
             backend = self.backend_seed if tag == "seed" else self.backend_refine
             r = self._call(user, tag if attempt == 0 else f"{tag}-repair{attempt}",
                            backend, iteration=it)
-            v = validate.validate(r.text, dest)
+            v = validate.validate(r.text, dest, target=self.target)
             if v.ok:
                 acc = f"{v.acceptance:.1%}" if v.acceptance is not None else "?"
                 print(f"    [gate] passed (smoke acceptance {acc})")
@@ -638,14 +641,14 @@ class Loop:
             backend = self.backend_seed if tag == "seed" else self.backend_refine
             r = self._call(user, f"{tag}-campaign-repair{attempt}", backend,
                            iteration=it)
-            v = validate.validate(r.text, dest)
+            v = validate.validate(r.text, dest, target=self.target)
             if not v.ok:
                 print(f"    [gate] FAILED at '{v.stage}' -> campaign repair "
                       f"{attempt}/{MAX_REPAIRS}")
                 err = v.error or v.stage
                 continue
             try:
-                summary = Campaign(name, self.max_examples, idir, mode="survey").run()
+                summary = Campaign(name, self.max_examples, idir, mode="survey", target=self.target).run()
             except Exception as again:
                 err = f"{type(again).__name__}: {again}"
                 print(f"    [run] campaign failed again: {err[:120]}")
@@ -702,7 +705,7 @@ class Loop:
 
             print(f"    [run] {self.max_examples} examples ...")
             try:
-                summary = Campaign(name, self.max_examples, idir, mode="survey").run()
+                summary = Campaign(name, self.max_examples, idir, mode="survey", target=self.target).run()
             except Exception as exc:
                 # The validation gate draws a few dozen documents, so a branch
                 # it never took can still fail at 500. A strategy that dies
@@ -803,6 +806,9 @@ def main() -> None:
     ap.add_argument("--prompt-set", default="v2", help="v1 (run A) or v2 (redesigned)")
     ap.add_argument("--seed-model", default=None, help="model for the seed call only")
     ap.add_argument("--refine-model", default=None, help="model for refine calls")
+    ap.add_argument("--target", default="mxml",
+                    choices=("mxml", "libxml2", "expat", "tinyxml2", "json", "http", "dns", "smtp"),
+                    help="fuzzing target parser or protocol (default: mxml)")
     a = ap.parse_args()
 
     # .env is read here rather than at import time, so importing the module for
@@ -816,7 +822,7 @@ def main() -> None:
     backend = a.backend or os.environ.get("LLM_BACKEND") or "replay"
     model = a.model or os.environ.get("LLM_MODEL") or None
 
-    print(f"[loop] backend={backend}  {envmod.describe_env()}")
+    print(f"[loop] backend={backend}  target={a.target}  {envmod.describe_env()}")
     if backend in ("openai", "api") and a.max_usd > 0:
         print("[loop] note: this backend reports tokens but no per-call price, so "
               f"--max-usd ${a.max_usd:.2f} is advisory; the iteration cap is the "
@@ -824,7 +830,7 @@ def main() -> None:
 
     loop = Loop(backend, a.run_id, a.max_examples, a.iterations,
                 a.max_usd, model, a.base_url, a.resume_from,
-                a.prompt_set, a.seed_model, a.refine_model)
+                a.prompt_set, a.seed_model, a.refine_model, a.target)
     final = loop.run()
     print(f"\nwrote {loop.out}/ITERATION_LOG.md")
     print(json.dumps(final["budget"], indent=2))

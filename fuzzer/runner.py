@@ -128,6 +128,7 @@ def run_one(
     harness: Path | str = DEFAULT_HARNESS,
     timeout_s: float = PER_RUN_TIMEOUT_S,
     extra_args: tuple[str, ...] = (),
+    target: Any = None,
 ) -> RunResult:
     """Run the harness on one document, fed via stdin.
 
@@ -136,6 +137,16 @@ def run_one(
     failure mode. Crashing inputs get written to disk separately by the caller,
     which is the only time the bytes need to persist.
     """
+    if target is not None:
+        from fuzzer.targets import get_target
+        t = get_target(target)
+        return t.run(document, timeout_s=timeout_s, extra_args=extra_args)
+
+    harness_path = Path(harness)
+    if not (harness_path.exists() and os.access(str(harness_path), os.X_OK)):
+        from fuzzer.targets import get_target
+        return get_target("mxml").run(document, timeout_s=timeout_s, extra_args=extra_args)
+
     env = {**os.environ, **SANITIZER_ENV}
     sha = hashlib.sha256(document).hexdigest()
     started = time.monotonic()

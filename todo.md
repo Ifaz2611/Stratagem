@@ -5,10 +5,10 @@ This document outlines potential improvements and new features for Stratagem, th
 ## High Priority
 
 ### Target Expansion
-- [ ] Add support for additional XML parsers (libxml2, expat, tinyxml2)
-- [ ] Implement target abstraction layer to make switching between targets easier
-- [ ] Add JSON parser target as a proof-of-concept for non-XML grammars
-- [ ] Consider supporting protocol parsers (HTTP, DNS, SMTP)
+- [x] Add support for additional XML parsers (libxml2, expat, tinyxml2)
+- [x] Implement target abstraction layer to make switching between targets easier
+- [x] Add JSON parser target as a proof-of-concept for non-XML grammars
+- [x] Consider supporting protocol parsers (HTTP, DNS, SMTP)
 
 ### Fuzzer Improvements
 - [ ] Implement parallel fuzzing (multiple campaigns running simultaneously)

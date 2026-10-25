@@ -192,6 +192,36 @@ python -m agent.loop \
   --resume-from 2
 ```
 
+### Switching Targets
+
+Stratagem supports multiple targets across document grammars and network protocols via the Target Abstraction Layer:
+
+- **XML Parsers**: `mxml` (default), `libxml2`, `expat`, `tinyxml2`
+- **JSON Parsers**: `json` (proof-of-concept for non-XML grammars)
+- **Network Protocol Parsers**: `http`, `dns`, `smtp`
+
+To run a campaign against a specific target:
+
+```bash
+# Fuzz Expat XML parser
+python -m fuzzer.campaign baseline --target expat
+
+# Fuzz JSON parser
+python -m fuzzer.campaign json_baseline --target json
+
+# Fuzz HTTP protocol parser
+python -m fuzzer.campaign http_baseline --target http
+
+# Fuzz DNS binary wire-format parser
+python -m fuzzer.campaign dns_baseline --target dns
+
+# Fuzz SMTP command parser
+python -m fuzzer.campaign smtp_baseline --target smtp
+
+# Run agentic loop on a target
+python -m agent.loop --target expat --backend replay --run-id expat-campaign
+```
+
 ## Output
 
 Each campaign creates a directory under `runs/`:

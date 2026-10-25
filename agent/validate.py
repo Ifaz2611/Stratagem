@@ -244,7 +244,7 @@ def check_interface(path: Path, timeout_s: float = 120.0) -> tuple[bool, str, li
     return d["ok"], d.get("error", ""), d.get("samples", [])
 
 
-def validate(response_text: str, dest: Path) -> Validation:
+def validate(response_text: str, dest: Path, target: Any = "mxml") -> Validation:
     """Run all four gates. `dest` is where the accepted module is written."""
     code = extract_code(response_text)
     if not code:
@@ -268,7 +268,7 @@ def validate(response_text: str, dest: Path) -> Validation:
     # Gate 4: does the parser actually accept any of this?
     from fuzzer.campaign import Campaign
     tmp = REPO_ROOT / "runs" / ".validate"
-    c = Campaign(dest.stem, SMOKE_EXAMPLES, tmp, mode="survey")
+    c = Campaign(dest.stem, SMOKE_EXAMPLES, tmp, mode="survey", target=target)
     summary = c.run()
     acc = summary["acceptance_rate"]
 

@@ -133,6 +133,7 @@ class Campaign:
     # al. (CCS 2018) require multiple trials for a valid evaluation.
     random_seed: int | None = None
     wall_clock_cap_s: float = MAX_WALL_CLOCK_S
+    target: Any = "mxml"
 
     def run(self) -> dict:
         if not 1 <= self.max_examples <= MAX_EXAMPLES_PER_ITERATION:
@@ -151,13 +152,16 @@ class Campaign:
         mod = importlib.reload(mod)
         strat = mod.documents()
 
+        from fuzzer.targets import get_target
+        target_obj = get_target(self.target)
+
         self.out_dir.mkdir(parents=True, exist_ok=True)
         crash_dir = self.out_dir / "crashes"
         results: list[dict] = []
         # Every payload is retained so the exact inputs ship as an artifact and
         # replay does not depend on regenerating them.
         payloads: list[bytes] = []
-        feats: list[features.Features] = []
+        feats: list[Any] = []
         crash_records: list[dict] = []
         crash_inputs: list[tuple[str, bytes, str]] = []
         started = time.monotonic()
@@ -173,14 +177,16 @@ class Campaign:
         def _body(doc):
             payload = _encode(doc)
             payloads.append(payload)
-            r = run_one(payload, harness=self.harness, extra_args=self.extra_args)
+            r = target_obj.run(payload, extra_args=self.extra_args)
 
             text = doc if isinstance(doc, str) else doc.decode("utf-8", "replace")
-            f = features.analyze(text, payload)
+            f = target_obj.analyze_features(text, payload)
             feats.append(f)
 
             rec = r.to_json()
-            rec["starts_lt"] = payload.lstrip()[:1] == b"<"
+            is_valid_shape = target_obj.is_valid_shape(payload)
+            rec["starts_lt"] = is_valid_shape
+            rec["valid_shape"] = is_valid_shape
             rec["structure"] = f.to_json()
             results.append(rec)
 
@@ -251,16 +257,19 @@ class Campaign:
             for rec in results:
                 fh.write(json.dumps(rec) + "\n")
 
-        summary = self._summarize(results, feats, crash_records, elapsed, shrunk_failure)
+        summary = self._summarize(results, feats, crash_records, elapsed, shrunk_failure, target_obj)
         summary["wall_clock_cap_s"] = self.wall_clock_cap_s
         summary["wall_clock_cap_reached"] = hit_wall_clock_cap
         summary["corpus"] = manifest
         (self.out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
         return summary
 
-    def _summarize(self, results: list[dict], feats: list[features.Features],
+    def _summarize(self, results: list[dict], feats: list[Any],
                    crash_records: list[dict], elapsed: float,
-                   shrunk: str | None) -> dict:
+                   shrunk: str | None, target_obj: Any = None) -> dict:
+        if target_obj is None:
+            from fuzzer.targets import get_target
+            target_obj = get_target(self.target)
         n = len(results)
         counts: dict[str, int] = {}
         for r in results:
@@ -287,7 +296,15 @@ class Campaign:
         lengths = [r["len"] for r in results] or [0]
         durs = [r["dur_ms"] for r in results] or [0.0]
 
+        diag_counts: dict[str, int] = {}
+        for d in all_diags:
+            norm = target_obj.normalize_diagnostic(d)
+            diag_counts[norm] = diag_counts.get(norm, 0) + 1
+        diag_hist = dict(sorted(diag_counts.items(), key=lambda kv: (-kv[1], kv[0])))
+
         return {
+            "target": target_obj.name,
+            "target_category": target_obj.category,
             "strategy": self.strategy_name,
             "mode": self.mode,
             "random_seed": self.random_seed,
@@ -299,10 +316,12 @@ class Campaign:
             "crash_count": crashes,
             "unique_crash_inputs": len({r["sha"] for r in results
                                         if r["outcome"] in ("crash", "timeout")}),
+            "shape_rate": round(
+                sum(1 for r in results if r.get("valid_shape", r.get("starts_lt"))) / n, 4) if n else 0.0,
             "xml_shaped_rate": round(
                 sum(1 for r in results if r.get("starts_lt")) / n, 4) if n else 0.0,
-            "diagnostic_templates": diagnostics.histogram(all_diags),
-            "distinct_diagnostic_templates": len(diagnostics.histogram(all_diags)),
+            "diagnostic_templates": diag_hist,
+            "distinct_diagnostic_templates": len(diag_hist),
             "input_len": {
                 "min": min(lengths), "max": max(lengths),
                 "mean": round(statistics.mean(lengths), 1),
@@ -312,7 +331,7 @@ class Campaign:
                 "mean": round(statistics.mean(durs), 2),
                 "max": max(durs),
             },
-            "structure": features.coverage(feats),
+            "structure": target_obj.summarize_structure(feats),
             "crash_groups": triage.group(crash_records),
             "shrunk_failure": shrunk,
         }
@@ -328,26 +347,32 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=None,
                     help="Hypothesis seed for an independent reproducible trial")
     ap.add_argument("--harness", default=str(DEFAULT_HARNESS))
+    ap.add_argument("--target", default="mxml",
+                    choices=("mxml", "libxml2", "expat", "tinyxml2", "json", "http", "dns", "smtp"),
+                    help="Target parser or protocol (default: mxml)")
     ap.add_argument("--index", action="store_true",
                     help="pass --index to the harness (positive control only)")
     args = ap.parse_args()
 
-    out = Path(args.out) if args.out else REPO_ROOT / "runs" / f"{args.strategy}-{args.mode}"
+    out = Path(args.out) if args.out else REPO_ROOT / "runs" / f"{args.strategy}-{args.target}-{args.mode}"
     c = Campaign(args.strategy, args.max_examples, out, Path(args.harness), args.mode,
                  extra_args=("--index",) if args.index else (),
-                 random_seed=args.seed)
+                 random_seed=args.seed,
+                 target=args.target)
     s = c.run()
 
+    print(f"target     : {s.get('target', 'mxml')} ({s.get('target_category', 'xml')})")
     print(f"strategy   : {s['strategy']}  ({s['mode']} mode)")
     print(f"examples   : {s['examples']}  in {s['wall_clock_s']}s")
     print(f"outcomes   : {s['outcomes']}")
     print(f"accept rate: {s['acceptance_rate']:.1%}")
-    print(f"xml-shaped : {s['xml_shaped_rate']:.1%}   (input begins with '<')")
+    print(f"valid shape: {s.get('shape_rate', s['xml_shaped_rate']):.1%}")
     print(f"crashes    : {s['crash_count']} ({s['unique_crash_inputs']} unique inputs)")
     st_ = s["structure"]
-    print(f"productions: {st_['productions_hit']}/{st_['productions_total']}"
-          f"   missing: {', '.join(st_['missing']) or 'none'}")
-    print(f"depth      : {st_['depth_histogram']}  max={st_['max_depth_seen']}")
+    print(f"productions: {st_.get('productions_hit', 0)}/{st_.get('productions_total', 0)}"
+          f"   missing: {', '.join(st_.get('missing', [])) or 'none'}")
+    if "depth_histogram" in st_:
+        print(f"depth      : {st_['depth_histogram']}  max={st_.get('max_depth_seen', 0)}")
     print(f"diag templates reached: {s['distinct_diagnostic_templates']}")
     for tpl, cnt in list(s["diagnostic_templates"].items())[:10]:
         print(f"   {cnt:5d}  {tpl}")

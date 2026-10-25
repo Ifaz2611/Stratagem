@@ -1,0 +1,44 @@
+RFC 1035 Domain Name System (DNS) Wire Format Specification for Stratagem
+
+DNS Message Wire Format:
++---------------------+
+|        Header       |  12 octets
++---------------------+
+|       Question      |  the question for the name server
++---------------------+
+|        Answer       |  RRs answering the question
++---------------------+
+|      Authority      |  RRs pointing toward an authority
++---------------------+
+|      Additional     |  RRs holding additional information
++---------------------+
+
+Header format:
+                                1  1  1  1  1  1
+  0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
++--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+|                      ID                       |
++--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+|QR|   Opcode  |AA|TC|RD|RA|   Z    |   RCODE   |
++--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+|                    QDCOUNT                    |
++--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+|                    ANCOUNT                    |
++--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+|                    NSCOUNT                    |
++--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+|                    ARCOUNT                    |
++--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+
+Question format:
+- QNAME: series of length-prefixed labels (e.g. \x07example\x03com\x00)
+- QTYPE: 2 octets (e.g. A=1, NS=2, CNAME=5, SOA=6, PTR=12, MX=15, TXT=16, AAAA=28, ANY=255)
+- QCLASS: 2 octets (IN=1)
+
+Resource Record format:
+- NAME: domain name or compression pointer (0xC0 | offset)
+- TYPE: 2 octets
+- CLASS: 2 octets
+- TTL: 32-bit signed integer (4 octets)
+- RDLENGTH: 16-bit unsigned integer (2 octets)
+- RDATA: variable octets (length = RDLENGTH)
