@@ -34,24 +34,21 @@ This document outlines potential improvements and new features for Stratagem, th
 - [x] Add visual coverage reports (HTML/interactive dashboards)
 
 ### Grammar Support
-- [ ] Add support for additional grammar formats (EBNF, Yacc/Bison)
-- [ ] Implement automatic grammar extraction from existing code
-- [ ] Add grammar mutation capabilities
-- [ ] Implement support for context-sensitive grammars
+- [x] Add support for additional grammar formats (EBNF, Yacc/Bison)
+- [x] Implement automatic grammar extraction from existing code
+- [x] Add grammar mutation capabilities
+- [x] Implement support for context-sensitive grammars
 
 ### LLM Backend
-- [ ] Add support for additional LLM providers (Azure OpenAI, Google Vertex, local models)
 - [ ] Implement streaming response handling for faster feedback
 - [ ] Add prompt versioning and A/B testing
 - [ ] Implement fallback mechanisms for LLM failures
-- [ ] Add cost optimization strategies (model selection, caching)
 
 ## Low Priority
 
 ### Developer Experience
 - [ ] Add comprehensive test suite for the agent loop
 - [ ] Implement better error messages and debugging tools
-- [ ] Add configuration file support (YAML/TOML)
 - [ ] Implement progress bars and real-time status updates
 - [ ] Add integration with CI/CD pipelines
 
@@ -63,7 +60,6 @@ This document outlines potential improvements and new features for Stratagem, th
 - [ ] Add case studies from past findings
 
 ### Performance
-- [ ] Profile and optimize slow components
 - [ ] Implement strategy compilation to bytecode
 - [ ] Add result caching for deterministic strategies
 - [ ] Optimize memory usage for large corpora
@@ -119,11 +115,6 @@ This document outlines potential improvements and new features for Stratagem, th
 
 ### Nice-to-Have
 - [ ] Add GUI for campaign monitoring
-- [ ] Implement strategy sharing marketplace
-- [ ] Add leaderboard for coverage achievements
-- [ ] Create plugin system for custom strategies
 - [ ] Add support for fuzzing multiple targets in one campaign
 
 ---
-
-**Note:** Prioritize items based on your specific use case and available resources. Items marked as "High Priority" would have the most significant impact on the framework's capabilities.
