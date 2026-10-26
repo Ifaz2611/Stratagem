@@ -183,3 +183,55 @@ Rare raw-byte branches are now covered by
 `fuzzer/strategies/byte_probe.py`. It contains eight fixed cases that run every
 time. Fixed probes are more reliable than random sampling for rare inputs that
 matter to the evaluation.
+
+## D14. Ensembles vote on measurements, not prose
+
+Multi-model ensembles could ask a judge model to rank candidate strategies, but
+that adds an unpredictable call and can reward prose style over evidence. The
+ensemble instead screens each candidate on a small campaign and applies a
+weighted Borda vote over crashes, production coverage, diagnostics,
+acceptance-band fit, depth and throughput. The crash criterion carries ten
+times the weight of the others, matching the loop's objective. The vote is
+reproducible and costs no extra LLM calls.
+
+Screening is deliberately smaller than a real iteration. It exists to rank
+candidates; the winner is then run at full size so the feedback the next prompt
+sees is measured on the same budget as every other iteration.
+
+## D15. Cache similarity is a retrieval heuristic, not an authority
+
+`TargetProfile` combines target name, category, grammar hash, production overlap
+and class bounds into a similarity score. Two XML parsers score 0.80-1.00 even
+with different names; XML and JSON score near zero. A cached strategy is always
+re-validated against the current target before use. Similarity chooses what to
+try; the validation gates decide whether it is allowed.
+
+The cache is opt-in because a cache hit removes an LLM call, which changes the
+call sequence that replay relies on.
+
+## D16. Tune the loop, not the model
+
+The tuner changes parameters the loop owns: examples per iteration, repair
+allowance, and the rotating directive. It does not change model temperature or
+sampling parameters, because the backends do not expose them uniformly and
+because a change there would make a run harder to compare with the historical
+ones. Example budget hill-climbs on marginal yield per document; repairs rise
+after a failure and fall after a clean streak; directives use UCB1 so an early
+lucky directive cannot monopolise the remaining iterations.
+
+## D17. Few-shot examples are excerpts with their entry point intact
+
+Past strategies are hundreds of lines. A prefix cut would remove the composite
+functions and `documents()` that make the example useful, so excerpts keep the
+head (imports and constants) and the tail (entry point), with the omitted middle
+marked. Similarity filtering reuses the cache profile, which prevents an XML
+strategy being offered to the DNS target.
+
+## D18. Generated harnesses are gated before they are trusted
+
+`agent/harness_gen.py` asks a model for a stdin-to-parser driver and then checks
+structure before writing `harness.c`: `main`, stdin reading, `DIAG<TAB>` output,
+all four exit statuses, required headers, balanced delimiters, and no shell,
+process or socket calls. `--compile` builds it with the same ASan+UBSan flags as
+the hand-written harnesses. A generated driver that fails the gate is written as
+`harness.rejected.c` and is never substituted silently.

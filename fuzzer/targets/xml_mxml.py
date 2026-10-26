@@ -21,6 +21,8 @@ class MxmlTarget(XMLTarget):
     name: str = "mxml"
     description: str = "Mini-XML parser v4.0.4 with error callback"
     harness_binary: Path = DEFAULT_HARNESS
+    harness_headers: tuple[str, ...] = ("mxml.h",)
+    harness_link_flags: tuple[str, ...] = ("-lmxml4",)
 
     def normalize_diagnostic(self, message: str) -> str:
         return diagnostics.normalize(message)

@@ -4,6 +4,9 @@ contrib/
 # Scratch output of the strategy validation gate.
 runs/.validate/
 
+# Reusable strategy cache (opt-in). Entries are regenerable from run artifacts.
+runs/.strategy_cache/
+
 # Secrets. Only .env.example is committed.
 .env
 .env.local

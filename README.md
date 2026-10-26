@@ -11,6 +11,11 @@ This project explores using LLMs as the driving intelligence behind a grammar-ba
 - **Agentic Loop**: LLM generates Python strategies → tests them → receives feedback → refines
 - **Blackbox Operation**: No code coverage signals; works only with parser results and input properties
 - **Multiple LLM Backends**: Claude Code CLI, OpenAI-compatible APIs, and replay mode
+- **Multi-Model Ensembles**: several models propose strategies; measured candidates are ranked by a weighted vote
+- **Strategy Cache**: validated strategies are reused across similar targets after re-validation
+- **Automatic Tuning**: example budget, repair allowance, and refinement directive adapt after each iteration
+- **Few-Shot Reuse**: successful strategies from earlier runs are ranked and injected into new prompts
+- **Generated Harnesses**: a target-specific C/C++ driver can be generated, gated, and compiled
 - **Grammar-Based**: Uses ANTLR XML grammar adapted for the target parser
 - **Sanitizer Integration**: AddressSanitizer and UndefinedBehaviorSanitizer for crash detection
 - **Reproducible**: All LLM interactions are recorded for replay without credentials
@@ -23,6 +28,11 @@ This project explores using LLMs as the driving intelligence behind a grammar-ba
 │   ├── loop.py      # Main iteration logic
 │   ├── llm.py       # LLM backend implementations
 │   ├── validate.py  # Strategy validation gates
+│   ├── ensemble.py  # Multi-model candidate voting
+│   ├── strategy_cache.py  # Cross-target strategy reuse
+│   ├── tuning.py    # Automatic loop hyperparameter tuning
+│   ├── fewshot.py   # Successful past strategies as prompt examples
+│   ├── harness_gen.py     # Target-specific harness generation
 │   └── prompts/     # Prompt templates (v1-v5)
 ├── fuzzer/          # Fuzzing engine
 │   ├── campaign.py  # Run strategies through harness
@@ -222,6 +232,35 @@ python -m fuzzer.campaign smtp_baseline --target smtp
 python -m agent.loop --target expat --backend replay --run-id expat-campaign
 ```
 
+### Agent Enhancements
+
+All five enhancements are opt-in. With none of the flags below, a run makes
+exactly the LLM calls it made before, so replay transcripts stay valid.
+
+```bash
+# Ensemble: one candidate per model, screened and ranked by weighted vote
+python -m agent.loop --backend openai \
+  --ensemble-models gpt-5,claude-sonnet-5 \
+  --screening-examples 80 --target expat --run-id ensemble-expat
+
+# Reuse a validated strategy from a similar target (XML -> XML, after re-validation)
+python -m agent.loop --backend openai --target expat \
+  --use-strategy-cache --run-id expat-reuse
+
+# Adapt examples/repairs/directive from measured marginal yield
+python -m agent.loop --backend openai --autotune --iterations 5
+
+# Inject the best strategies from earlier runs as few-shot examples
+python -m agent.loop --backend openai --few-shot --few-shot-k 3
+
+# Generate a harness for a target, then run against it
+python -m agent.harness_gen --target expat --backend openai --compile
+python -m agent.loop --backend openai --target expat --use-generated-harness
+```
+
+See [agent/README.md](agent/README.md#agent-enhancements) for the mechanisms,
+safeguards, and output artifacts.
+
 ## Output
 
 Each campaign creates a directory under `runs/`:
@@ -232,7 +271,10 @@ runs/my-campaign/
 │   ├── iter-0/
 │   │   ├── strategy.py      # Generated strategy
 │   │   ├── summary.json     # Iteration summary
-│   │   └── results.jsonl    # Per-input results
+│   │   ├── results.jsonl    # Per-input results
+│   │   ├── ensemble.json    # Candidate vote report (ensembles only)
+│   │   ├── cache_hit.json   # Reused strategy provenance (cache only)
+│   │   └── few_shot.md      # Examples injected into this prompt (few-shot only)
 │   ├── iter-1/
 │   └── ...
 ├── transcript/              # LLM prompts and responses
@@ -241,6 +283,7 @@ runs/my-campaign/
 │   │   ├── user.md
 │   │   └── response.json
 │   └── ...
+├── tuning.json              # Hyperparameter search state (autotune only)
 └── final_summary.json
 ```
 

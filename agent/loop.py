@@ -27,6 +27,10 @@ from pathlib import Path
 
 from agent import env as envmod
 from agent import llm, validate
+from agent.ensemble import Candidate, vote_candidates
+from agent.fewshot import FewShotLibrary
+from agent.strategy_cache import StrategyCache
+from agent.tuning import HyperparameterTuner, TuningDecision
 from fuzzer.campaign import Campaign, MAX_EXAMPLES_PER_ITERATION
 from fuzzer.features import PRODUCTIONS
 
@@ -146,6 +150,26 @@ class Loop:
     refine_model: str | None = None
     target: str = "mxml"
 
+    # ---- agent enhancements (all opt-in; defaults preserve replay behavior)
+    # Reuse a validated strategy from a similar target instead of paying for a
+    # seed call. Disabled by default because it changes the call sequence.
+    use_strategy_cache: bool = False
+    cache_dir: str | None = None
+    cache_similarity: float = 0.70
+    # Append ranked examples from earlier runs to the seed/refine prompt.
+    few_shot: bool = False
+    few_shot_k: int = 3
+    few_shot_budget: int = 6000
+    # Adapt examples/repairs/directive after each iteration.
+    autotune: bool = False
+    tune_state: str | None = None
+    # Comma-separated model list, one candidate each. One candidate = off.
+    ensemble_models: str | None = None
+    ensemble_candidates: int = 1
+    screening_examples: int = 50
+    # Use a harness produced by `python -m agent.harness_gen`.
+    use_generated_harness: bool = False
+
     budget: Budget = field(init=False)
     out: Path = field(init=False)
 
@@ -164,6 +188,13 @@ class Loop:
                 f"{self.resume_from}")
         if self.max_usd <= 0:
             raise ValueError("max_usd must be positive")
+        if not 1 <= self.ensemble_candidates <= 8:
+            raise ValueError("ensemble_candidates must be 1..8")
+        if not 1 <= self.screening_examples <= MAX_EXAMPLES_PER_ITERATION:
+            raise ValueError(
+                f"screening_examples must be 1..{MAX_EXAMPLES_PER_ITERATION}")
+        if not 0.0 <= self.cache_similarity <= 1.0:
+            raise ValueError("cache_similarity must be 0..1")
         self.budget = Budget(self.max_iterations, self.max_usd)
         self.out = REPO_ROOT / "runs" / self.run_id
         self.transcript = self.out / "transcript"
@@ -178,6 +209,51 @@ class Loop:
         from fuzzer.targets import get_target
         self.target_obj = get_target(self.target)
         self.system = (self.prompts / "system.md").read_text(encoding="utf-8")
+
+        # A generated harness is an alternative measurement instrument for the
+        # target. Resolve it before any campaign can run; if only the source
+        # exists attempts a compile, and if that fails the target's reference
+        # runner remains in place rather than the run dying at the first input.
+        if self.use_generated_harness:
+            from agent.harness_gen import (build_generated_harness,
+                                           find_generated_harness)
+            generated = find_generated_harness(self.target_obj)
+            if generated is None:
+                generated = build_generated_harness(self.target_obj)
+            if generated is not None:
+                self.target_obj.harness_binary = generated
+                print(f"    [harness] using generated binary {generated}")
+            else:
+                print("    [harness] no generated harness found for "
+                      f"'{self.target}'; falling back to the reference runner")
+
+        self._last_gate_failures = 0
+        self._last_source_kind = "llm"
+        self._last_ensemble: dict | None = None
+
+        self.cache = None
+        if self.use_strategy_cache:
+            from agent.strategy_cache import DEFAULT_CACHE_DIR
+            self.cache = StrategyCache(
+                Path(self.cache_dir) if self.cache_dir else DEFAULT_CACHE_DIR,
+                min_similarity=self.cache_similarity)
+        self.fewshot = None
+        if self.few_shot:
+            self.fewshot = FewShotLibrary(k=self.few_shot_k,
+                                          budget_chars=self.few_shot_budget)
+        self.tuner = None
+        if self.autotune:
+            state = Path(self.tune_state) if self.tune_state else self.out / "tuning.json"
+            if self.resume_from and state.exists():
+                self.tuner = HyperparameterTuner.load(
+                    state, max_examples=self.max_examples,
+                    directives=self.directives)
+                print(f"    [tune] restored state from {state}")
+            else:
+                self.tuner = HyperparameterTuner(
+                    max_examples=self.max_examples,
+                    directives=self.directives,
+                    state_path=state)
 
         # Restore before building the backends: a resumed replay must start at
         # the first call the resumed iteration actually owns, not at call-1.
@@ -219,6 +295,27 @@ class Loop:
             self.backend_seed = mk(self.seed_model or self.model)
             self.backend_refine = mk(self.refine_model or self.model)
             self.backend = self.backend_refine
+
+        # Build one backend per ensemble member. A model list is the normal
+        # case; ensemble_candidates > 1 with no list samples the same model
+        # several times, which is still useful for variance reduction but is
+        # not a multi-model ensemble.
+        models = [m.strip() for m in re.split(r"[,;\s]+", self.ensemble_models or "")
+                  if m.strip()]
+        self.ensemble_models_list = models
+        self.ensemble_backends = []
+        count = max(self.ensemble_candidates, len(models))
+        if count > 1:
+            if self.backend_kind == "replay":
+                print("    [ensemble] disabled: replay reproduces a recorded "
+                      "call sequence and cannot add candidates")
+            else:
+                for i in range(count):
+                    chosen = models[i % len(models)] if models else (
+                        self.seed_model or self.model)
+                    self.ensemble_backends.append(mk(chosen))
+                print(f"    [ensemble] {count} candidate(s), models="
+                      f"{', '.join(models) if models else '(backend default)'}")
 
     # ----------------------------------------------------------------- resume
     @property
@@ -462,7 +559,8 @@ class Loop:
                 .replace("{productions}", "\n   ".join(
                     "  ".join(PRODUCTIONS[i:i + 4]) for i in range(0, len(PRODUCTIONS), 4))))
 
-    def _refine_prompt(self, it: int, source: str, summary: dict, results: list[dict]) -> str:
+    def _refine_prompt(self, it: int, source: str, summary: dict, results: list[dict],
+                       directive_override: str | None = None) -> str:
         tpl = (self.prompts / "refine.md").read_text(encoding="utf-8")
         st = summary["structure"]
         slowest = sorted(results, key=lambda r: -r["dur_ms"])[:3]
@@ -505,8 +603,9 @@ class Loop:
             f"{b:14} share={e['share']:6.1%}  acceptance={e['acceptance_rate']:6.1%}  n={e['n']}"
             for b, e in sorted(bk.items())) or "(not measured)"
 
-        directive = (self.directives[(it - 1) % len(self.directives)]
-                     if self.directives else "improve the strategy")
+        directive = (directive_override
+                     or (self.directives[(it - 1) % len(self.directives)]
+                         if self.directives else "improve the strategy"))
 
         return (tpl
                 .replace("{directive}", directive)
@@ -542,28 +641,44 @@ class Loop:
                 .replace("{crash_section}", crash_txt))
 
     # ------------------------------------------------------------------- main
-    def _obtain_strategy(self, it: int, prompt: str, tag: str) -> tuple[str, str] | None:
+    def _obtain_strategy(self, it: int, prompt: str, tag: str,
+                         max_repairs: int | None = None
+                         ) -> tuple[str, str] | None:
         """Call, validate, repair. Returns (module_name, source) or None."""
+        repairs = MAX_REPAIRS if max_repairs is None else max(0, int(max_repairs))
+        self._last_gate_failures = 0
+        self._last_source_kind = "llm"
         name = f"gen_iter{it}"
         dest = STRATEGY_DIR / f"{name}.py"
         if self.backend_seed.name == "replay":
             return self._replay_strategy(it, prompt, tag, name, dest)
+        if self.ensemble_backends:
+            return self._ensemble_strategy(it, prompt, tag, repairs)
+        backend = self.backend_seed if tag == "seed" else self.backend_refine
+        return self._obtain_single(it, prompt, tag, name, dest, backend, repairs)
+
+    def _obtain_single(self, it: int, prompt: str, tag: str, name: str,
+                       dest: Path, backend, max_repairs: int
+                       ) -> tuple[str, str] | None:
+        """One model's candidate: call, validate, repair up to `max_repairs`."""
         user = prompt
         attempt = 0
         resends = 0
-        while attempt <= MAX_REPAIRS:
+        failures = 0
+        while attempt <= max_repairs:
             if self.budget.would_overrun():
                 print(f"    [budget] ${self.budget.cost_usd:.2f} spent, mean call "
                       f"${self.budget.mean_call_cost:.2f}; not enough left under "
                       f"${self.budget.max_usd:.2f} for another call")
+                self._last_gate_failures += failures
                 return None
-            backend = self.backend_seed if tag == "seed" else self.backend_refine
-            r = self._call(user, tag if attempt == 0 else f"{tag}-repair{attempt}",
-                           backend, iteration=it)
+            call_tag = tag if attempt == 0 else f"{tag}-repair{attempt}"
+            r = self._call(user, call_tag, backend, iteration=it)
             v = validate.validate(r.text, dest, target=self.target)
             if v.ok:
                 acc = f"{v.acceptance:.1%}" if v.acceptance is not None else "?"
-                print(f"    [gate] passed (smoke acceptance {acc})")
+                print(f"    [gate] {name} passed (smoke acceptance {acc})")
+                self._last_gate_failures += failures
                 return name, v.code
             # A truncated block is a transport failure, not a modelling error:
             # the response arrived without its head. Resend the same prompt
@@ -575,14 +690,124 @@ class Loop:
                 if self.budget.would_overrun():
                     print(f"    [budget] no room under ${self.budget.max_usd:.2f} "
                           f"for another resend")
+                    self._last_gate_failures += failures
                     return None
                 continue
-            print(f"    [gate] FAILED at '{v.stage}' -> repair {attempt + 1}/{MAX_REPAIRS}")
-            if attempt == MAX_REPAIRS or self.budget.would_overrun():
+            failures += 1
+            print(f"    [gate] {name} FAILED at '{v.stage}' -> repair "
+                  f"{attempt + 1}/{max_repairs}")
+            if attempt == max_repairs or self.budget.would_overrun():
+                self._last_gate_failures += failures
                 return None
             user = (prompt + "\n\n---\n\n# Your previous attempt was rejected\n\n"
                     + v.feedback())
             attempt += 1
+        self._last_gate_failures += failures
+        return None
+
+    def _ensemble_strategy(self, it: int, prompt: str, tag: str,
+                           max_repairs: int) -> tuple[str, str] | None:
+        """Generate one candidate per model, screen them, and hold a vote.
+
+        The screening campaign is much smaller than the real iteration: it is
+        there to rank candidates, not to produce the run's artifact. The winner
+        is then run again at full size by the caller, exactly like a
+        single-model strategy, so the feedback the next prompt sees is measured
+        on the same budget as every other iteration.
+        """
+        candidates: list[Candidate] = []
+        screen_examples = min(self.screening_examples, self.max_examples)
+        for idx, backend in enumerate(self.ensemble_backends):
+            if self.budget.would_overrun():
+                print(f"    [ensemble] budget stops after {idx} candidate(s)")
+                break
+            name = f"gen_iter{it}_c{idx}"
+            dest = STRATEGY_DIR / f"{name}.py"
+            model = getattr(backend, "model", "") or self.model or "(default)"
+            print(f"    [ensemble] candidate {idx + 1}/{len(self.ensemble_backends)} "
+                  f"model={model}")
+            got = self._obtain_single(it, prompt, f"{tag}-ens{idx}", name, dest,
+                                      backend, max_repairs)
+            if got is None:
+                candidates.append(Candidate(name=name, model=str(model),
+                                            error="validation failed"))
+                continue
+            _, source = got
+            screen_dir = (self.out / "iterations" / f"iter-{it}" /
+                          "screening" / f"candidate-{idx}")
+            try:
+                summary = Campaign(name, screen_examples, screen_dir,
+                                   mode="survey", target=self.target,
+                                   random_seed=1000 + it).run()
+            except Exception as exc:
+                err = f"{type(exc).__name__}: {exc}"
+                print(f"    [ensemble] candidate {idx} screening failed: {err[:160]}")
+                candidates.append(Candidate(name=name, model=str(model),
+                                            source=source, error=err))
+                continue
+            candidates.append(Candidate(name=name, model=str(model),
+                                        source=source, summary=summary))
+            print(f"    [ensemble] candidate {idx} screened: "
+                  f"accept={summary['acceptance_rate']:.1%} "
+                  f"prod={summary['structure']['productions_hit']} "
+                  f"diag={summary['distinct_diagnostic_templates']} "
+                  f"crashes={summary['crash_count']}")
+
+        result = vote_candidates(candidates)
+        report = result.to_json()
+        report["iteration"] = it
+        report["screening_examples"] = screen_examples
+        self._last_ensemble = report
+        report_dir = self.out / "iterations" / f"iter-{it}"
+        report_dir.mkdir(parents=True, exist_ok=True)
+        (report_dir / "ensemble.json").write_text(
+            json.dumps(report, indent=2), encoding="utf-8")
+
+        if result.winner is None:
+            print("    [ensemble] no candidate passed the vote")
+            return None
+        winner = result.winner
+        print(f"    [ensemble] winner {winner.name} ({winner.model}) "
+              f"votes={winner.votes:.1f} score={winner.score:.2f}")
+        dest = STRATEGY_DIR / f"gen_iter{it}.py"
+        dest.write_text(winner.source, encoding="utf-8")
+        self._last_source_kind = "ensemble"
+        return f"gen_iter{it}", winner.source
+
+    def _try_strategy_cache(self, it: int) -> tuple[str, str] | None:
+        """Reuse a cached strategy for a similar target, after re-validation.
+
+        Similarity is only a retrieval heuristic. The strategy still has to
+        pass the same gates as a freshly generated one, against the current
+        target. The first few matches are tried because the closest target may
+        have a generator that fails this target's mixture bounds.
+        """
+        if self.cache is None:
+            return None
+        matches = self.cache.lookup(self.target_obj, limit=3)
+        if not matches:
+            return None
+        name = f"gen_iter{it}"
+        dest = STRATEGY_DIR / f"{name}.py"
+        for match in matches:
+            response = "```python\n" + match.source + "\n```"
+            v = validate.validate(response, dest, target=self.target)
+            if not v.ok:
+                print(f"    [cache] match from {match.entry.target.name} "
+                      f"(sim={match.similarity:.2f}) rejected at '{v.stage}'")
+                continue
+            acc = f"{v.acceptance:.1%}" if v.acceptance is not None else "?"
+            print(f"    [cache] reusing strategy from {match.entry.target.name} "
+                  f"(sim={match.similarity:.2f}, score={match.score:.2f}, "
+                  f"smoke acceptance {acc})")
+            meta = match.to_json()
+            meta["smoke_acceptance"] = v.acceptance
+            idir = self.out / "iterations" / f"iter-{it}"
+            idir.mkdir(parents=True, exist_ok=True)
+            (idir / "cache_hit.json").write_text(
+                json.dumps(meta, indent=2), encoding="utf-8")
+            self._last_source_kind = "cache"
+            return name, v.code
         return None
 
     def _replay_strategy(self, it: int, prompt: str, tag: str, name: str,
@@ -615,16 +840,21 @@ class Loop:
         return name, code
 
     def _repair_campaign(self, it: int, prompt: str, tag: str, name: str,
-                         exc: Exception) -> tuple[str, str, dict] | None:
+                         exc: Exception, max_repairs: int | None = None,
+                         examples: int | None = None
+                         ) -> tuple[str, str, dict] | None:
         """Repair a strategy that passed the gate then died during the campaign.
 
         Returns (module name, source, summary) once the campaign completes, or
         None when the budget or the repair allowance runs out.
         """
+        repairs = MAX_REPAIRS if max_repairs is None else max(0, int(max_repairs))
+        run_examples = self.max_examples if examples is None else max(
+            1, min(self.max_examples, int(examples)))
         dest = STRATEGY_DIR / f"{name}.py"
         idir = self.out / "iterations" / f"iter-{it}"
         err = f"{type(exc).__name__}: {exc}"
-        for attempt in range(1, MAX_REPAIRS + 1):
+        for attempt in range(1, repairs + 1):
             if self.budget.would_overrun():
                 print(f"    [budget] ${self.budget.cost_usd:.2f} spent, mean call "
                       f"${self.budget.mean_call_cost:.2f}; not enough left under "
@@ -632,7 +862,7 @@ class Loop:
                 return None
             user = (prompt + "\n\n---\n\n# Your previous attempt was rejected\n\n"
                     "The module passed validation but failed part-way through the "
-                    f"{self.max_examples}-document run:\n\n{err[:1200]}\n\n"
+                    f"{run_examples}-document run:\n\n{err[:1200]}\n\n"
                     "The failing path was not taken by the smaller validation "
                     "sample, so check every branch, not only the common one. "
                     "Hypothesis rejects some sizes outright, so keep collection "
@@ -644,11 +874,11 @@ class Loop:
             v = validate.validate(r.text, dest, target=self.target)
             if not v.ok:
                 print(f"    [gate] FAILED at '{v.stage}' -> campaign repair "
-                      f"{attempt}/{MAX_REPAIRS}")
+                      f"{attempt}/{repairs}")
                 err = v.error or v.stage
                 continue
             try:
-                summary = Campaign(name, self.max_examples, idir, mode="survey", target=self.target).run()
+                summary = Campaign(name, run_examples, idir, mode="survey", target=self.target).run()
             except Exception as again:
                 err = f"{type(again).__name__}: {again}"
                 print(f"    [run] campaign failed again: {err[:120]}")
@@ -672,47 +902,90 @@ class Loop:
                 print(f"    budget exhausted (${self.budget.cost_usd:.2f}); stopping")
                 break
 
+            # Per-iteration provenance. These are read when the iteration row
+            # is written, so a cache hit or ensemble must not bleed into the
+            # next iteration's row.
+            self._last_gate_failures = 0
+            self._last_source_kind = "llm"
+            self._last_ensemble = None
+
+            if self.tuner is not None:
+                decision = self.tuner.decide(it)
+            else:
+                decision = TuningDecision(examples=self.max_examples,
+                                          repairs=MAX_REPAIRS,
+                                          directive=None, reason="fixed")
+            examples = max(1, min(self.max_examples, decision.examples))
+
             if it == 0:
                 prompt, tag = self._seed_prompt(), "seed"
             else:
-                prompt = self._refine_prompt(it, prev_source, prev_summary, prev_results)
+                prompt = self._refine_prompt(
+                    it, prev_source, prev_summary, prev_results,
+                    directive_override=decision.directive)
                 tag = "refine"
 
-            try:
-                got = self._obtain_strategy(it, prompt, tag)
-            except llm.LLMError as exc:
-                # A backend failure must not discard the iterations that already
-                # succeeded. Stop the loop, but fall through to writing the
-                # summary and iteration log for the work completed so far.
-                print(f"    [llm] FAILED: {exc}")
-                if getattr(exc, "usage_limit", False):
-                    print(f"    the backend refused on an account limit, not a "
-                          f"budget one: ${self.budget.cost_usd:.2f} of "
-                          f"${self.max_usd:.2f} is spent. Resume with "
-                          f"--resume-from {it} once the limit window has reset.")
-                print("    stopping early; completed iterations are preserved")
-                stopped_early = f"{type(exc).__name__}: {exc}"
-                break
+            idir = self.out / "iterations" / f"iter-{it}"
+            idir.mkdir(parents=True, exist_ok=True)
+
+            # Few-shot examples are appended after the template is rendered so
+            # both prompt sets (which do not contain a placeholder) get them.
+            if self.fewshot is not None:
+                block = self.fewshot.render(
+                    self.target_obj, exclude_run=self.run_id,
+                    exclude_iteration=it)
+                if block:
+                    prompt = prompt + "\n\n---\n\n" + block
+                    (idir / "few_shot.md").write_text(block, encoding="utf-8")
+                    print(f"    [few-shot] appended {len(block)} chars "
+                          f"from earlier runs")
+
+            got = None
+            if it == 0 and self.cache is not None:
+                got = self._try_strategy_cache(it)
+            if got is None:
+                try:
+                    got = self._obtain_strategy(it, prompt, tag,
+                                                max_repairs=decision.repairs)
+                except llm.LLMError as exc:
+                    # A backend failure must not discard the iterations that
+                    # already succeeded. Stop the loop, but fall through to
+                    # writing the summary and iteration log for the work
+                    # completed so far.
+                    print(f"    [llm] FAILED: {exc}")
+                    if getattr(exc, "usage_limit", False):
+                        print(f"    the backend refused on an account limit, not "
+                              f"a budget one: ${self.budget.cost_usd:.2f} of "
+                              f"${self.max_usd:.2f} is spent. Resume with "
+                              f"--resume-from {it} once the limit window has "
+                              f"reset.")
+                    print("    stopping early; completed iterations are preserved")
+                    stopped_early = f"{type(exc).__name__}: {exc}"
+                    break
             if got is None:
                 print("    [gate] could not obtain a usable strategy; stopping")
                 stopped_early = "validation gate could not produce a usable strategy"
                 break
             name, source = got
+            source_kind = self._last_source_kind
 
-            idir = self.out / "iterations" / f"iter-{it}"
-            idir.mkdir(parents=True, exist_ok=True)
             (idir / "strategy.py").write_text(source, encoding="utf-8")
 
-            print(f"    [run] {self.max_examples} examples ...")
+            print(f"    [run] {examples} examples ...")
+            campaign_failed = False
             try:
-                summary = Campaign(name, self.max_examples, idir, mode="survey", target=self.target).run()
+                summary = Campaign(name, examples, idir, mode="survey",
+                                   target=self.target).run()
             except Exception as exc:
                 # The validation gate draws a few dozen documents, so a branch
                 # it never took can still fail at 500. A strategy that dies
-                # here has already been paid for, so spend one repair on the
+                # here has already been paid for, so spend a repair on the
                 # traceback rather than losing the iteration.
+                campaign_failed = True
                 print(f"    [run] campaign failed: {type(exc).__name__}: {exc}")
-                repaired = self._repair_campaign(it, prompt, tag, name, exc)
+                repaired = self._repair_campaign(
+                    it, prompt, tag, name, exc, max_repairs=decision.repairs,
+                    examples=examples)
                 if repaired is None:
                     stopped_early = f"campaign failed: {type(exc).__name__}: {exc}"
                     break
@@ -725,9 +998,20 @@ class Loop:
                   f"diag={summary['distinct_diagnostic_templates']} "
                   f"crashes={summary['crash_count']}")
 
+            # Persist this iteration's strategy for reuse by later runs. It is
+            # only cached after it ran, so a cached entry always has measured
+            # results attached and a score to rank it by.
+            if self.cache is not None:
+                self.cache.store(source, self.target_obj, summary,
+                                 self.run_id, it)
+
             results = [json.loads(l) for l in (idir / "results.jsonl").read_text(encoding="utf-8").splitlines()]
+            new_diags = set(summary.get("diagnostic_templates", {})) - self.union_diagnostics
+            new_prods = set(st.get("hit", {})) - self.union_productions
             iterations.append({
                 "iteration": it, "strategy": name,
+                "examples": examples,
+                "source": source_kind,
                 "acceptance_rate": summary["acceptance_rate"],
                 "productions_hit": st["productions_hit"],
                 "productions_total": st["productions_total"],
@@ -737,9 +1021,39 @@ class Loop:
                 "crash_count": summary["crash_count"],
                 "crash_groups": list(summary["crash_groups"].keys()),
                 "cost_usd_cumulative": round(self.budget.cost_usd, 4),
+                "tuning": decision.to_json(),
+                "gate_failures": self._last_gate_failures,
+                "ensemble": bool(self._last_ensemble),
             })
+            if self.tuner is not None:
+                self.tuner.observe(
+                    it, examples=examples,
+                    new_productions=len(new_prods),
+                    new_diagnostics=len(new_diags),
+                    crash_groups=len(summary["crash_groups"]),
+                    gate_failures=self._last_gate_failures,
+                    campaign_failed=campaign_failed,
+                    cost_usd=self.budget.cost_usd,
+                )
             prev_source, prev_summary, prev_results = source, summary, results
 
+        features = {
+            "strategy_cache": self.cache.stats() if self.cache is not None else {"enabled": False},
+            "few_shot": self.fewshot.stats() if self.fewshot is not None else {"enabled": False},
+            "autotune": self.tuner.to_json() if self.tuner is not None else {"enabled": False},
+            "ensemble": {
+                "enabled": bool(self.ensemble_backends),
+                "models": self.ensemble_models_list,
+                "candidates": len(self.ensemble_backends) or 1,
+                "screening_examples": self.screening_examples,
+                "last_vote": self._last_ensemble,
+            },
+            "harness": {
+                "target": self.target,
+                "binary": str(getattr(self.target_obj, "harness_binary", "") or ""),
+                "generated": bool(self.use_generated_harness),
+            },
+        }
         final = {
             "run_id": self.run_id,
             "backend": self.backend_kind,
@@ -753,6 +1067,7 @@ class Loop:
             "cost_cap_enforced": self.cost_cap_enforced,
             "stopped_early": stopped_early,
             "resumed_from": self.resume_from or None,
+            "features": features,
         }
         (self.out / "loop_summary.json").write_text(json.dumps(final, indent=2), encoding="utf-8")
         self._write_log(final)
@@ -764,16 +1079,18 @@ class Loop:
             f"# Iteration log: {final['run_id']}", "",
             f"Backend `{final['backend']}`, model `{final['model']}`, "
             f"{final['max_examples']} examples per iteration.", "",
-            "| iter | accept | productions | max depth | diagnostics | crashes | cum. cost |",
-            "|---|---|---|---|---|---|---|",
-            f"| baseline | {BASELINE['acceptance']} | {BASELINE['productions']} | "
+            "| iter | source | examples | accept | productions | max depth | diagnostics | crashes | cum. cost |",
+            "|---|---|---|---|---|---|---|---|---|",
+            f"| baseline | - | - | {BASELINE['acceptance']} | {BASELINE['productions']} | "
             f"{BASELINE['depth']} | {BASELINE['templates']} | 0 | $0 |",
         ]
         for r in rows:
             cost_str = (f"${r['cost_usd_cumulative']:.2f} |"
                         if r.get("cost_usd_cumulative") is not None else "n/a |")
             lines.append(
-                f"| {r['iteration']} | {r['acceptance_rate']:.1%} | "
+                f"| {r['iteration']} | {r.get('source', 'llm')} | "
+                f"{r.get('examples', final['max_examples'])} | "
+                f"{r['acceptance_rate']:.1%} | "
                 f"{r['productions_hit']}/{r['productions_total']} | {r['max_depth']} | "
                 f"{r['distinct_diagnostic_templates']} | {r['crash_count']} | {cost_str}")
         b = final["budget"]
@@ -809,6 +1126,32 @@ def main() -> None:
     ap.add_argument("--target", default="mxml",
                     choices=("mxml", "libxml2", "expat", "tinyxml2", "json", "http", "dns", "smtp"),
                     help="fuzzing target parser or protocol (default: mxml)")
+
+    grp = ap.add_argument_group("agent enhancements")
+    grp.add_argument("--use-strategy-cache", action="store_true",
+                     help="reuse a validated strategy from a similar target")
+    grp.add_argument("--cache-dir", default=None,
+                     help="cache directory (default: runs/.strategy_cache)")
+    grp.add_argument("--cache-similarity", type=float, default=0.70,
+                     help="minimum target similarity for reuse (default: 0.70)")
+    grp.add_argument("--few-shot", action="store_true",
+                     help="append successful strategies from earlier runs to prompts")
+    grp.add_argument("--few-shot-k", type=int, default=3,
+                     help="maximum few-shot examples (default: 3)")
+    grp.add_argument("--few-shot-budget", type=int, default=6000,
+                     help="character budget for the few-shot block (default: 6000)")
+    grp.add_argument("--autotune", action="store_true",
+                     help="adapt examples, repairs and directive after each iteration")
+    grp.add_argument("--tune-state", default=None,
+                     help="tuning state path (default: runs/<run-id>/tuning.json)")
+    grp.add_argument("--ensemble-models", default=None,
+                     help="comma-separated models; one strategy candidate each")
+    grp.add_argument("--ensemble-candidates", type=int, default=1,
+                     help="candidate count when --ensemble-models is omitted (default: 1)")
+    grp.add_argument("--screening-examples", type=int, default=50,
+                     help="examples used to screen ensemble candidates (default: 50)")
+    grp.add_argument("--use-generated-harness", action="store_true",
+                     help="use harness/generated/<target>/harness if present")
     a = ap.parse_args()
 
     # .env is read here rather than at import time, so importing the module for
@@ -828,9 +1171,32 @@ def main() -> None:
               f"--max-usd ${a.max_usd:.2f} is advisory; the iteration cap is the "
               "hard limit. Token counts are recorded exactly.")
 
-    loop = Loop(backend, a.run_id, a.max_examples, a.iterations,
-                a.max_usd, model, a.base_url, a.resume_from,
-                a.prompt_set, a.seed_model, a.refine_model, a.target)
+    loop = Loop(
+        backend_kind=backend,
+        run_id=a.run_id,
+        max_examples=a.max_examples,
+        max_iterations=a.iterations,
+        max_usd=a.max_usd,
+        model=model,
+        base_url=a.base_url,
+        resume_from=a.resume_from,
+        prompt_set=a.prompt_set,
+        seed_model=a.seed_model,
+        refine_model=a.refine_model,
+        target=a.target,
+        use_strategy_cache=a.use_strategy_cache,
+        cache_dir=a.cache_dir,
+        cache_similarity=a.cache_similarity,
+        few_shot=a.few_shot,
+        few_shot_k=a.few_shot_k,
+        few_shot_budget=a.few_shot_budget,
+        autotune=a.autotune,
+        tune_state=a.tune_state,
+        ensemble_models=a.ensemble_models,
+        ensemble_candidates=a.ensemble_candidates,
+        screening_examples=a.screening_examples,
+        use_generated_harness=a.use_generated_harness,
+    )
     final = loop.run()
     print(f"\nwrote {loop.out}/ITERATION_LOG.md")
     print(json.dumps(final["budget"], indent=2))

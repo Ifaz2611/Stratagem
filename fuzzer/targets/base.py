@@ -51,6 +51,14 @@ class BaseTarget(abc.ABC):
         "byte_hostile": (0.15, 0.45),
     }
 
+    # Metadata used by agent/harness_gen.py when it writes a target-specific
+    # driver. Defaults describe a self-contained C harness with no external
+    # library, which is true for the protocol targets. Parser-library targets
+    # override the header and link fields.
+    harness_language: str = "c"
+    harness_headers: tuple[str, ...] = ()
+    harness_link_flags: tuple[str, ...] = ()
+
     @abc.abstractmethod
     def is_valid_shape(self, payload: bytes) -> bool:
         """Check whether input has the target's expected superficial shape."""

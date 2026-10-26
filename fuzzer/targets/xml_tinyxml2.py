@@ -34,6 +34,9 @@ class Tinyxml2Target(XMLTarget):
     name: str = "tinyxml2"
     description: str = "TinyXML-2 simple, small, efficient C++ XML parser"
     harness_binary: Path = REPO_ROOT / "build" / "tinyxml2" / "harness"
+    harness_language: str = "cpp"
+    harness_headers: tuple[str, ...] = ("tinyxml2.h",)
+    harness_link_flags: tuple[str, ...] = ("-ltinyxml2",)
 
     def normalize_diagnostic(self, message: str) -> str:
         return normalize_tinyxml2(message)

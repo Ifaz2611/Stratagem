@@ -102,6 +102,72 @@ Environment configuration and helpers.
 - Environment variable handling
 - Configuration validation
 
+### ensemble.py
+
+Multi-model candidate generation and voting. Each model writes a strategy, the
+strategy is screened on a small campaign, and a weighted Borda vote ranks the
+measured results. The crash criterion has ten times the weight of the others, so
+a candidate that found a bug beats a tidier candidate that did not.
+
+**Key API:**
+```python
+from agent.ensemble import Candidate, vote_candidates
+
+result = vote_candidates([
+    Candidate("a", "gpt-5", source=code_a, summary=summary_a),
+    Candidate("b", "claude", source=code_b, summary=summary_b),
+])
+print(result.winner.name, result.votes)
+```
+
+The vote is over measurements, not prose, so it adds no LLM calls and is
+replayable. `EnsembleResult.to_json()` is written to `iterations/iter-N/ensemble.json`.
+
+### strategy_cache.py
+
+Persistent cache of validated strategies keyed by target similarity.
+
+`TargetProfile` combines target name, category, grammar hash, production
+vocabulary and class bounds. The default threshold of 0.70 means two XML
+parsers are neighbours (0.80-1.00) while XML and JSON are not (below 0.10).
+A cached strategy is always re-validated against the current target; similarity
+only decides what to retrieve.
+
+```python
+from agent.strategy_cache import StrategyCache
+cache = StrategyCache("runs/.strategy_cache", min_similarity=0.70)
+cache.store(source, target, summary, run_id, iteration)
+matches = cache.lookup(get_target("expat"))
+```
+
+### tuning.py
+
+Adapts loop hyperparameters from the measurements the loop already collects:
+
+- `examples`: hill-climbs on marginal yield per document
+- `repairs`: rises after a gate/campaign failure, falls after a clean streak
+- `directive`: UCB1 over the rotating refinement directives
+- state is persisted to `tuning.json`, so `--resume-from` continues the search
+
+### fewshot.py
+
+Scans `runs/*/iterations/iter-*/` and ranks past strategies with the shared
+scoring function. Similarity filtering prevents an XML strategy being offered
+to a DNS target. Long strategies are excerpted as head + tail so the
+`documents()` entry point survives truncation. The rendered block is appended
+to the seed/refine prompt and saved as `few_shot.md`.
+
+### harness_gen.py
+
+Generates a target-specific C/C++ harness from the target's metadata and grammar.
+Before writing `harness.c`, the structural gate requires: `main`, stdin reading,
+`DIAG<TAB>` output, all four exit codes, required headers, balanced delimiters,
+and no shell/process/socket calls. `--compile` builds with ASan+UBSan.
+
+```bash
+python -m agent.harness_gen --target expat --backend openai --compile
+```
+
 ### prompts/
 
 Directory containing prompt templates for different versions.
@@ -344,6 +410,42 @@ Loop(
     refine_model=None,              # Model for refinement
 )
 ```
+
+## Agent Enhancements
+
+All enhancements are opt-in. The defaults leave the call sequence unchanged,
+which is what keeps `--backend replay` working against existing transcripts.
+
+| Flag | Effect | Artifacts |
+|---|---|---|
+| `--ensemble-models m1,m2` | one candidate per model; screen and vote | `iterations/iter-N/ensemble.json` |
+| `--ensemble-candidates N` | N samples of the same model when no list | same |
+| `--screening-examples N` | examples per ensemble screening campaign | same |
+| `--use-strategy-cache` | reuse a validated strategy from a similar target | `iterations/iter-N/cache_hit.json`, `runs/.strategy_cache/` |
+| `--cache-similarity F` | retrieval threshold (default 0.70) | same |
+| `--few-shot` | append ranked past strategies to prompts | `iterations/iter-N/few_shot.md` |
+| `--autotune` | adapt examples, repairs, and directive | `tuning.json` |
+| `--use-generated-harness` | run against `harness/generated/<target>/` | harness binary |
+
+### Replay safety
+
+Caching a seed can remove an LLM call, and an ensemble adds calls. Both change
+the transcript, so both are off by default. Ensemble is explicitly disabled
+under `--backend replay`; cache and few-shot are safe to use with replay only
+when the cache is empty or the transcript was recorded with them enabled.
+
+### Cache lifecycle
+
+A strategy enters the cache after its campaign completes, so every entry has
+measured results and a score. Entries are deduplicated by source + target, and
+the cache keeps the best 200. Delete `runs/.strategy_cache/` to start fresh.
+
+### Tuning state
+
+`tuning.json` records the current examples/repairs values, per-directive UCB
+statistics and the full observation history. Delete it (or pass `--tune-state`
+elsewhere) to restart the search. On `--resume-from`, the state is restored and
+the search continues rather than restarting.
 
 ## See Also
 

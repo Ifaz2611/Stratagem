@@ -36,6 +36,8 @@ class ExpatTarget(XMLTarget):
     name: str = "expat"
     description: str = "Expat stream-oriented XML parser"
     harness_binary: Path = REPO_ROOT / "build" / "expat" / "harness"
+    harness_headers: tuple[str, ...] = ("expat.h",)
+    harness_link_flags: tuple[str, ...] = ("-lexpat",)
 
     def normalize_diagnostic(self, message: str) -> str:
         return normalize_expat(message)

@@ -18,11 +18,11 @@ This document outlines potential improvements and new features for Stratagem, th
 - [x] Implement incremental campaign persistence for long-running tests
 
 ### Agent Enhancements
-- [ ] Add support for multi-model ensembles (vote on best strategy)
-- [ ] Implement strategy caching and reuse across similar targets
-- [ ] Add automatic hyperparameter tuning for the agentic loop
-- [ ] Implement few-shot learning with successful past strategies as examples
-- [ ] Add capability to generate target-specific harness code
+- [x] Add support for multi-model ensembles (vote on best strategy)
+- [x] Implement strategy caching and reuse across similar targets
+- [x] Add automatic hyperparameter tuning for the agentic loop
+- [x] Implement few-shot learning with successful past strategies as examples
+- [x] Add capability to generate target-specific harness code
 
 ## Medium Priority
 

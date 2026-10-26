@@ -42,6 +42,8 @@ class JSONTarget(BaseTarget):
     harness_binary: Path = REPO_ROOT / "build" / "json" / "harness"
     grammar_file: Path = REPO_ROOT / "grammar" / "JSON.g4"
     productions: tuple[str, ...] = JSON_PRODUCTIONS
+    harness_headers: tuple[str, ...] = ("cJSON.h",)
+    harness_link_flags: tuple[str, ...] = ("-lcjson",)
 
     def is_valid_shape(self, payload: bytes) -> bool:
         """JSON inputs typically begin with '{', '[', '\"', digits, or literals."""

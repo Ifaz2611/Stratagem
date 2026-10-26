@@ -37,6 +37,8 @@ class Libxml2Target(XMLTarget):
     name: str = "libxml2"
     description: str = "GNOME libxml2 standard XML C parser"
     harness_binary: Path = REPO_ROOT / "build" / "libxml2" / "harness"
+    harness_headers: tuple[str, ...] = ("libxml/parser.h", "libxml/tree.h")
+    harness_link_flags: tuple[str, ...] = ("-lxml2",)
 
     def normalize_diagnostic(self, message: str) -> str:
         return normalize_libxml2(message)
