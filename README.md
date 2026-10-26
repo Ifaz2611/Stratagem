@@ -1,22 +1,25 @@
 # Stratagem: Agentic Grammar Fuzzing
 
-A blackbox fuzzing framework that uses Large Language Models (LLMs) to generate and refine test strategies for parsing software. The project demonstrates agentic fuzzing by targeting the Mini-XML (mxml) parser v4.0.4.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+
+An innovative blackbox fuzzing framework that leverages Large Language Models (LLMs) to generate and refine test strategies for parsing software. Stratagem demonstrates the power of agentic fuzzing by targeting the Mini-XML (mxml) parser v4.0.4, with support for multiple parsers and protocols.
 
 ## Overview
 
-This project explores using LLMs as the driving intelligence behind a grammar-based fuzzer. Instead of traditional mutation-based fuzzing, an agent writes Hypothesis strategies in Python, tests them against a real C parser, receives feedback, and iteratively improves the strategy.
+Stratagem explores a novel approach to grammar-based fuzzing by using LLMs as the driving intelligence behind test strategy generation. Unlike traditional mutation-based fuzzing, an agent writes Hypothesis strategies in Python, tests them against real parsers, receives feedback, and iteratively improves the strategy in a closed loop.
 
 ### Key Features
 
 - **Agentic Loop**: LLM generates Python strategies → tests them → receives feedback → refines
 - **Blackbox Operation**: No code coverage signals; works only with parser results and input properties
 - **Multiple LLM Backends**: Claude Code CLI, OpenAI-compatible APIs, and replay mode
-- **Multi-Model Ensembles**: several models propose strategies; measured candidates are ranked by a weighted vote
-- **Strategy Cache**: validated strategies are reused across similar targets after re-validation
-- **Automatic Tuning**: example budget, repair allowance, and refinement directive adapt after each iteration
-- **Few-Shot Reuse**: successful strategies from earlier runs are ranked and injected into new prompts
-- **Generated Harnesses**: a target-specific C/C++ driver can be generated, gated, and compiled
-- **Grammar-Based**: Uses ANTLR XML grammar adapted for the target parser
+- **Multi-Model Ensembles**: Several models propose strategies; measured candidates are ranked by weighted vote
+- **Strategy Cache**: Validated strategies are reused across similar targets after re-validation
+- **Automatic Tuning**: Example budget, repair allowance, and refinement directive adapt after each iteration
+- **Few-Shot Reuse**: Successful strategies from earlier runs are ranked and injected into new prompts
+- **Generated Harnesses**: Target-specific C/C++ drivers can be generated, gated, and compiled
+- **Grammar-Based**: Uses ANTLR grammars adapted for target parsers
 - **Sanitizer Integration**: AddressSanitizer and UndefinedBehaviorSanitizer for crash detection
 - **Reproducible**: All LLM interactions are recorded for replay without credentials
 
@@ -40,9 +43,12 @@ This project explores using LLMs as the driving intelligence behind a grammar-ba
 │   ├── features.py  # Analyze generated documents
 │   ├── strategies/  # Generated strategy modules
 │   └── triage.py    # Crash deduplication
-├── grammar/         # ANTLR XML grammar
+├── grammar/         # ANTLR grammars
 │   ├── XMLParser.g4
 │   ├── XMLLexer.g4
+│   ├── JSON.g4
+│   ├── HTTP.g4
+│   ├── SMTP.g4
 │   └── ADAPTATIONS.md
 ├── harness/         # C harness for mxml
 │   ├── harness.c
@@ -58,7 +64,7 @@ This project explores using LLMs as the driving intelligence behind a grammar-ba
 
 ## Target: Mini-XML v4.0.4
 
-The project fuzzes [Mini-XML](https://github.com/michaelrsweet/mxml), a small C XML library, pinned to commit `0d5afc42` (v4.0.4). mxml was chosen because:
+The project primarily fuzzes [Mini-XML](https://github.com/michaelrsweet/mxml), a small C XML library, pinned to commit `0d5afc42` (v4.0.4). mxml was chosen because:
 
 - Small and well-maintained codebase
 - Provides detailed error messages through callbacks
@@ -234,8 +240,7 @@ python -m agent.loop --target expat --backend replay --run-id expat-campaign
 
 ### Agent Enhancements
 
-All five enhancements are opt-in. With none of the flags below, a run makes
-exactly the LLM calls it made before, so replay transcripts stay valid.
+All five enhancements are opt-in. With none of the flags below, a run makes exactly the LLM calls it made before, so replay transcripts stay valid.
 
 ```bash
 # Ensemble: one candidate per model, screened and ranked by weighted vote
@@ -267,8 +272,7 @@ python -m agent.loop --backend openai --fallbacks cli,replay --circuit-breaker
 python -m agent.loop --backend openai --prompt-ab v4,v5 --iterations 10
 ```
 
-See [agent/README.md](agent/README.md#agent-enhancements) for the mechanisms,
-safeguards, and output artifacts.
+See [agent/README.md](agent/README.md#agent-enhancements) for the mechanisms, safeguards, and output artifacts.
 
 ## Output
 
@@ -311,7 +315,7 @@ Key engineering choices are documented in `docs/design-decisions.md`:
 
 ## Grammar Adaptations
 
-The ANTLR XML grammar is adapted for mxml's behavior. See `grammar/ADAPTATIONS.md` for:
+The ANTLR grammars are adapted for specific parser behaviors. See `grammar/ADAPTATIONS.md` for:
 
 - Named entities (mxml only supports 4: amp, lt, gt, quot)
 - Matching tag names (grammar allows `<a></b>`, mxml rejects)
@@ -327,7 +331,8 @@ The ANTLR XML grammar is adapted for mxml's behavior. See `grammar/ADAPTATIONS.m
 - [docs/findings.md](docs/findings.md) - Test results and bug reports
 - [docs/REPORT.md](docs/REPORT.md) - Project report
 - [grammar/ADAPTATIONS.md](grammar/ADAPTATIONS.md) - Grammar vs parser differences
-- [todo.md](todo.md) - Future expansion ideas
+- [CONTRIBUTING.md](CONTRIBUTING.md) - Contributing guidelines
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) - Code of conduct
 
 ## Research Context
 
@@ -342,20 +347,18 @@ The framework is designed to be extensible to other parsers and grammars.
 
 ## License
 
-See individual component licenses. The project uses:
-
-- Mini-XML (LGPL with exceptions)
-- ANTLR grammars (BSD)
-- Hypothesis (MPL 2.0)
-- OpenAI Python SDK (Apache 2.0)
+This project is licensed under the MIT License - see the [license](license) file for details.
 
 ## Contributing
 
-This is a research project. For suggestions or questions, please refer to the issues in the target repository (mxml) for any reported bugs.
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to contribute to this project.
+
+## Code of Conduct
+
+Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md) when participating in this project.
 
 ## Acknowledgments
 
 - Mini-XML by Michael R Sweet
 - ANTLR grammars-v4 community
 - Hypothesis testing library
-
