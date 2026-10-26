@@ -256,6 +256,15 @@ python -m agent.loop --backend openai --few-shot --few-shot-k 3
 # Generate a harness for a target, then run against it
 python -m agent.harness_gen --target expat --backend openai --compile
 python -m agent.loop --backend openai --target expat --use-generated-harness
+
+# Stream responses for real-time feedback and token telemetry
+python -m agent.loop --backend openai --stream --run-id stream-run
+
+# Multi-tier fallback backend with circuit breaker protection
+python -m agent.loop --backend openai --fallbacks cli,replay --circuit-breaker
+
+# A/B test prompt sets (v4 vs v5) with statistical significance evaluation
+python -m agent.loop --backend openai --prompt-ab v4,v5 --iterations 10
 ```
 
 See [agent/README.md](agent/README.md#agent-enhancements) for the mechanisms,
@@ -349,4 +358,4 @@ This is a research project. For suggestions or questions, please refer to the is
 - Mini-XML by Michael R Sweet
 - ANTLR grammars-v4 community
 - Hypothesis testing library
-- Claude by Anthropic (for the Claude Code backend)
+

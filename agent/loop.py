@@ -170,6 +170,12 @@ class Loop:
     # Use a harness produced by `python -m agent.harness_gen`.
     use_generated_harness: bool = False
 
+    # ---- llm backend enhancements
+    stream: bool = False
+    prompt_ab: str | None = None
+    fallbacks: str | None = None
+    circuit_breaker: bool = False
+
     budget: Budget = field(init=False)
     out: Path = field(init=False)
 
@@ -199,9 +205,22 @@ class Loop:
         self.out = REPO_ROOT / "runs" / self.run_id
         self.transcript = self.out / "transcript"
         self.transcript.mkdir(parents=True, exist_ok=True)
-        self.prompts = PROMPTS_ROOT / self.prompt_set if self.prompt_set != "v1" else PROMPTS_ROOT
-        if not (self.prompts / "seed.md").exists():
-            raise llm.LLMError(f"prompt set not found: {self.prompts}")
+        from agent.prompt_manager import PromptManager, PromptABTester, PromptVersion
+        self.prompt_manager = PromptManager(PROMPTS_ROOT)
+        try:
+            self.prompt_version = self.prompt_manager.get_version(self.prompt_set)
+            self.prompts = self.prompt_version.path or (PROMPTS_ROOT / self.prompt_set if self.prompt_set != "v1" else PROMPTS_ROOT)
+        except KeyError:
+            self.prompts = PROMPTS_ROOT / self.prompt_set if self.prompt_set != "v1" else PROMPTS_ROOT
+            if not (self.prompts / "seed.md").exists():
+                raise llm.LLMError(f"prompt set not found: {self.prompts}")
+            self.prompt_version = PromptVersion.from_dir(self.prompts, name=self.prompt_set)
+
+        self.ab_tester = None
+        if self.prompt_ab:
+            variants = [v.strip() for v in re.split(r"[,;\s]+", self.prompt_ab) if v.strip()]
+            if len(variants) >= 2:
+                self.ab_tester = PromptABTester(variants=variants, manager=self.prompt_manager)
 
         self.directives = self._load_directives()
         self.union_diagnostics: set[str] = set()
@@ -283,8 +302,12 @@ class Loop:
                 kw["start"] = (sum(self._calls_per_iteration().get(i, 0)
                                    for i in range(self.resume_from))
                                if self.resume_from else 0)
+            fallback_list = [f.strip() for f in re.split(r"[,;\s]+", self.fallbacks) if f.strip()] if self.fallbacks else None
             return llm.make_backend(self.backend_kind,
-                                    transcript_dir=self.transcript, **kw)
+                                    transcript_dir=self.transcript,
+                                    fallbacks=fallback_list,
+                                    circuit_breaker=self.circuit_breaker,
+                                    **kw)
 
         if self.backend_kind == "replay":
             # One shared instance: replay consumes recorded calls in order, so
@@ -534,8 +557,14 @@ class Loop:
         (d / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
         t0 = time.monotonic()
-        r = (backend or self.backend).complete(self.system, user)
+        be = backend or self.backend
+        if getattr(self, "stream", False) and hasattr(be, "complete_stream"):
+            r = be.complete_stream(self.system, user)
+        else:
+            r = be.complete(self.system, user)
         elapsed = time.monotonic() - t0
+        if getattr(r, "fallback_used", False):
+            print(f"    [llm:fallback] failover used: from {r.fallback_from} to {r.backend} ({r.model})")
 
         rec = r.to_json()
         rec["tag"] = tag
@@ -1152,6 +1181,16 @@ def main() -> None:
                      help="examples used to screen ensemble candidates (default: 50)")
     grp.add_argument("--use-generated-harness", action="store_true",
                      help="use harness/generated/<target>/harness if present")
+
+    grp_llm = ap.add_argument_group("llm enhancements")
+    grp_llm.add_argument("--stream", action="store_true",
+                         help="stream LLM responses for faster feedback")
+    grp_llm.add_argument("--prompt-ab", default=None,
+                         help="comma-separated prompt sets for A/B testing (e.g. v4,v5)")
+    grp_llm.add_argument("--fallbacks", default=None,
+                         help="comma-separated fallback backends (e.g. cli,replay)")
+    grp_llm.add_argument("--circuit-breaker", action="store_true",
+                         help="enable circuit breaker protection on backend calls")
     a = ap.parse_args()
 
     # .env is read here rather than at import time, so importing the module for
@@ -1196,6 +1235,10 @@ def main() -> None:
         ensemble_candidates=a.ensemble_candidates,
         screening_examples=a.screening_examples,
         use_generated_harness=a.use_generated_harness,
+        stream=a.stream,
+        prompt_ab=a.prompt_ab,
+        fallbacks=a.fallbacks,
+        circuit_breaker=a.circuit_breaker,
     )
     final = loop.run()
     print(f"\nwrote {loop.out}/ITERATION_LOG.md")

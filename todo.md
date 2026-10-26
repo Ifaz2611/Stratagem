@@ -40,9 +40,9 @@ This document outlines potential improvements and new features for Stratagem, th
 - [x] Implement support for context-sensitive grammars
 
 ### LLM Backend
-- [ ] Implement streaming response handling for faster feedback
-- [ ] Add prompt versioning and A/B testing
-- [ ] Implement fallback mechanisms for LLM failures
+- [x] Implement streaming response handling for faster feedback
+- [x] Add prompt versioning and A/B testing
+- [x] Implement fallback mechanisms for LLM failures
 
 ## Low Priority
 

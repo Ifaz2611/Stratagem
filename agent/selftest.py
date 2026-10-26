@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+import time
 from pathlib import Path
 
 from agent.ensemble import Candidate, vote_candidates
@@ -218,6 +219,100 @@ def test_harness() -> None:
           not validate_harness_code(_VALID_HARNESS, mxml).ok)
 
 
+# ----------------------------------------------------------------- llm backend
+def test_streaming() -> None:
+    from agent.llm import LLMResponse, StreamAccumulator, _chunk_text
+    chunks = []
+    acc = StreamAccumulator(on_chunk=lambda c: chunks.append(c))
+    acc.add_chunk("abc")
+    acc.add_chunk("def")
+    check("streaming/accumulator text", acc.text == "abcdef")
+    check("streaming/accumulator chunks", chunks == ["abc", "def"])
+    check("streaming/accumulator ttft", acc.time_to_first_token_s is not None and acc.time_to_first_token_s >= 0)
+
+    split = list(_chunk_text("1234567890", chunk_size=4))
+    check("streaming/chunk text", split == ["1234", "5678", "90"])
+
+    resp = LLMResponse(text="hi", backend="mock", streaming=True, duration_s=0.5, time_to_first_token_s=0.1)
+    d = resp.to_json()
+    check("streaming/response to_json", d.get("streaming") is True and d.get("time_to_first_token_s") == 0.1)
+
+
+def test_circuit_breaker() -> None:
+    from agent.llm import CircuitBreaker, CircuitState
+    cb = CircuitBreaker(failure_threshold=2, recovery_timeout_s=0.01)
+    check("circuit/initial closed", cb.state == CircuitState.CLOSED and cb.allow_request() is True)
+    cb.record_failure("err 1")
+    check("circuit/one failure still closed", cb.state == CircuitState.CLOSED)
+    cb.record_failure("err 2")
+    check("circuit/tripped open", cb.state == CircuitState.OPEN and cb.allow_request() is False)
+    time.sleep(0.02)
+    check("circuit/half open probe", cb.allow_request() is True and cb.state == CircuitState.HALF_OPEN)
+    cb.record_success()
+    check("circuit/recovered closed", cb.state == CircuitState.CLOSED and cb.failure_count == 0)
+
+
+def test_fallback_backend() -> None:
+    from agent.llm import FallbackBackend, LLMError, LLMResponse, AllBackendsFailedError
+    class MockB:
+        def __init__(self, name, fail=False):
+            self.name = name
+            self.fail = fail
+        def complete(self, s, u, stream=False, on_chunk=None):
+            if self.fail:
+                raise LLMError(f"{self.name} failed")
+            return LLMResponse(text=f"{self.name} ok", backend=self.name)
+
+    primary = MockB("primary", fail=True)
+    secondary = MockB("secondary", fail=False)
+    fb = FallbackBackend(primary=primary, fallbacks=[secondary])
+    r = fb.complete("sys", "usr")
+    check("fallback/routes to secondary", r.backend == "secondary" and r.fallback_used is True)
+    check("fallback/records origin", r.fallback_from == "primary")
+
+    both_fail = FallbackBackend(primary=MockB("p", fail=True), fallbacks=[MockB("s", fail=True)])
+    try:
+        both_fail.complete("s", "u")
+        check("fallback/raises on all failed", False)
+    except AllBackendsFailedError:
+        check("fallback/raises on all failed", True)
+
+
+def test_prompt_versions() -> None:
+    from agent.prompt_manager import PromptManager
+    mgr = PromptManager()
+    versions = mgr.list_versions()
+    check("prompts/discovers versions", all(v in versions for v in ("v2", "v3", "v4", "v5")))
+
+    v2 = mgr.get_version("v2")
+    seed = v2.render_seed(grammar_commit="comm", parser_g4="p4", lexer_g4="l4", productions="prods")
+    check("prompts/renders seed", "comm" in seed and "p4" in seed and "prods" in seed)
+    refine = v2.render_refine(it=1, source="PASS_CODE = 1", directive="deepen")
+    check("prompts/renders refine", "PASS_CODE = 1" in refine and "deepen" in refine)
+    check("prompts/validates cleanly", len(v2.validate()) == 0)
+
+    diffs = mgr.compare_versions("v2", "v5")
+    check("prompts/diffs versions", "refine" in diffs and len(diffs["refine"]) > 0)
+
+
+def test_prompt_ab() -> None:
+    from agent.prompt_manager import PromptABTester
+    ab = PromptABTester(["v4", "v5"], routing="round_robin")
+    v1 = ab.next_variant()
+    v2 = ab.next_variant()
+    check("ab/round robin alternates", v1.name != v2.name)
+
+    for i in range(10):
+        ab.record_trial("v4", i, {"productions_hit": 10 + i % 2, "acceptance_rate": 0.3})
+        ab.record_trial("v5", i, {"productions_hit": 25 + i % 2, "acceptance_rate": 0.7})
+
+    ev = ab.evaluate("v4", "v5", "productions_hit")
+    check("ab/evaluates winner", ev["winner"] == "v5" and ev["statistically_significant"] is True)
+    check("ab/calculates effect size", ev["effect_size_a12"] == 1.0)
+    rep = ab.render_report(baseline="v4")
+    check("ab/renders report", "# Prompt A/B Testing Report" in rep and "YES" in rep)
+
+
 def main() -> int:
     test_scoring()
     test_ensemble()
@@ -225,6 +320,11 @@ def main() -> int:
     test_cache()
     test_fewshot()
     test_harness()
+    test_streaming()
+    test_circuit_breaker()
+    test_fallback_backend()
+    test_prompt_versions()
+    test_prompt_ab()
     print(f"{_passed} passed")
     if _failed:
         print(f"{len(_failed)} FAILED")
