@@ -12,7 +12,7 @@
 #                        test whether the proxy signals actually tracked real
 #                        coverage. See docs/design-decisions.md D3 and D7.
 #
-# Usage: ./harness/build.sh [asan|cov|all]     (default: all)
+# Usage: ./harness/build.sh [asan|cov|tsan|msan|all]     (default: all)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -43,6 +43,8 @@ fi
 #                              enough that frames stay legible.
 ASAN_OPTIM="-g -O1 -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=all"
 COV_OPTIM="-g -O0 --coverage"
+TSAN_OPTIM="-g -O1 -fno-omit-frame-pointer -fsanitize=thread"
+MSAN_OPTIM="-g -O1 -fno-omit-frame-pointer -fsanitize=memory"
 
 build_one() {
   local name="$1" optim="$2"
@@ -65,17 +67,22 @@ build_one() {
 case "$WHICH" in
   asan) build_one asan "$ASAN_OPTIM" ;;
   cov)  build_one cov  "$COV_OPTIM"  ;;
-  all)  build_one asan "$ASAN_OPTIM"; build_one cov "$COV_OPTIM" ;;
-  *)    echo "usage: $0 [asan|cov|all]" >&2; exit 2 ;;
+  tsan) build_one tsan "$TSAN_OPTIM" ;;
+  msan) build_one msan "$MSAN_OPTIM" ;;
+  all)  build_one asan "$ASAN_OPTIM"; build_one cov "$COV_OPTIM"; build_one tsan "$TSAN_OPTIM"; build_one msan "$MSAN_OPTIM" ;;
+  *)    echo "usage: $0 [asan|cov|tsan|msan|all]" >&2; exit 2 ;;
 esac
 
 # Prove the sanitizers are genuinely linked in, rather than assuming the flags
 # took effect. A silently non-instrumented build is the failure mode that makes
 # a fuzzer report "no bugs found" no matter what it generates.
-if [ -x "$ROOT/build/asan/harness" ]; then
-  n=$(nm "$ROOT/build/asan/harness" 2>/dev/null | grep -cE '__asan|__ubsan' || true)
-  echo "[build] asan/ubsan symbols in harness: $n"
-  [ "$n" -gt 0 ] || { echo "[build] FATAL: sanitizers not linked" >&2; exit 1; }
-fi
+for san in asan tsan msan; do
+  if [ -x "$ROOT/build/$san/harness" ]; then
+    pat="__${san}|__ubsan"
+    n=$(nm "$ROOT/build/$san/harness" 2>/dev/null | grep -cE "$pat" || true)
+    echo "[build] $san symbols in harness: $n"
+    [ "$n" -gt 0 ] || { echo "[build] FATAL: $san sanitizers not linked" >&2; exit 1; }
+  fi
+done
 
 echo "[build] done"

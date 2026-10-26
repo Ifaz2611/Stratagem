@@ -43,24 +43,71 @@ DEFAULT_SLOW_THRESHOLD_S = 1.0
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_HARNESS = REPO_ROOT / "build" / "asan" / "harness"
 
+
+class SanitizerType(str, Enum):
+    ASAN = "asan"
+    UBSAN = "ubsan"
+    TSAN = "tsan"
+    MSAN = "msan"
+    LSAN = "lsan"
+
+
 # Sanitizer environment. Set here rather than inherited from the shell so a
 # forgotten export cannot silently change what counts as a crash.
 #
-#   halt_on_error / abort_on_error : make UBSan fatal. Without this it prints and
-#     continues, exiting 0.
+#   halt_on_error / abort_on_error : make UBSan/ASan/TSan/MSan fatal.
 #   detect_leaks=0 : mxml abandons partial node trees on rejection, so leaks
 #     would fire on most inputs and bury real crashes. See design-decisions D4.
 SANITIZER_ENV = {
     "ASAN_OPTIONS": "abort_on_error=1:detect_leaks=0:symbolize=1:print_stacktrace=1",
     "UBSAN_OPTIONS": "halt_on_error=1:abort_on_error=1:print_stacktrace=1",
+    "TSAN_OPTIONS": "abort_on_error=1:symbolize=1:report_bugs=1:exitcode=66",
+    "MSAN_OPTIONS": "abort_on_error=1:symbolize=1:exitcode=66",
 }
 
 SANITIZER_MARKERS = (
     "AddressSanitizer",
     "UndefinedBehaviorSanitizer",
     "LeakSanitizer",
+    "ThreadSanitizer",
+    "MemorySanitizer",
     "runtime error:",
+    "data race",
+    "use-of-uninitialized-value",
+    "lock-order-inversion",
+    "destroy-locked-mutex",
 )
+
+
+def detect_sanitizer(stderr: str) -> str | None:
+    """Detect which sanitizer reported an error in stderr, if any."""
+    if not stderr:
+        return None
+    if "ThreadSanitizer" in stderr or "data race" in stderr or "lock-order-inversion" in stderr:
+        return "ThreadSanitizer"
+    if "MemorySanitizer" in stderr or "use-of-uninitialized-value" in stderr:
+        return "MemorySanitizer"
+    if "AddressSanitizer" in stderr:
+        return "AddressSanitizer"
+    if "LeakSanitizer" in stderr:
+        return "LeakSanitizer"
+    if "UndefinedBehaviorSanitizer" in stderr or "runtime error:" in stderr:
+        return "UndefinedBehaviorSanitizer"
+    return None
+
+
+def get_sanitizer_env(
+    sanitizers: tuple[str, ...] | None = None,
+    extra_options: dict[str, str] | None = None,
+) -> dict[str, str]:
+    """Build environment variables dictionary for specified sanitizers."""
+    env = dict(SANITIZER_ENV)
+    if sanitizers:
+        allowed_keys = {f"{s.upper()}_OPTIONS" for s in sanitizers}
+        env = {k: v for k, v in env.items() if k in allowed_keys}
+    if extra_options:
+        env.update(extra_options)
+    return env
 
 
 class Outcome(str, Enum):
@@ -97,6 +144,7 @@ class RunResult:
     input_len: int = 0
     is_slow: bool = False
     slow_threshold_s: float | None = None
+    sanitizer: str | None = None
 
     def to_json(self) -> dict:
         """Compact form for the JSONL log. stderr only kept when it matters."""
@@ -115,6 +163,8 @@ class RunResult:
             d["timeout"] = True
         if self.signal_name:
             d["signal"] = self.signal_name
+        if self.sanitizer:
+            d["sanitizer"] = self.sanitizer
         if self.outcome.is_crash:
             d["stderr"] = self.stderr
         return d
@@ -137,6 +187,8 @@ def run_one(
     extra_args: tuple[str, ...] = (),
     target: Any = None,
     slow_threshold_s: float | None = None,
+    sanitizers: tuple[str, ...] | None = None,
+    sanitizer_env: dict[str, str] | None = None,
 ) -> RunResult:
     """Run the harness on one document, fed via stdin.
 
@@ -148,24 +200,45 @@ def run_one(
     if target is not None:
         from fuzzer.targets import get_target
         t = get_target(target)
-        return t.run(
-            document,
-            timeout_s=timeout_s,
-            extra_args=extra_args,
-            slow_threshold_s=slow_threshold_s,
-        )
+        try:
+            return t.run(
+                document,
+                timeout_s=timeout_s,
+                extra_args=extra_args,
+                slow_threshold_s=slow_threshold_s,
+                sanitizers=sanitizers,
+                sanitizer_env=sanitizer_env,
+            )
+        except TypeError:
+            return t.run(
+                document,
+                timeout_s=timeout_s,
+                extra_args=extra_args,
+                slow_threshold_s=slow_threshold_s,
+            )
 
     harness_path = Path(harness)
     if not (harness_path.exists() and os.access(str(harness_path), os.X_OK)):
         from fuzzer.targets import get_target
-        return get_target("mxml").run(
-            document,
-            timeout_s=timeout_s,
-            extra_args=extra_args,
-            slow_threshold_s=slow_threshold_s,
-        )
+        try:
+            return get_target("mxml").run(
+                document,
+                timeout_s=timeout_s,
+                extra_args=extra_args,
+                slow_threshold_s=slow_threshold_s,
+                sanitizers=sanitizers,
+                sanitizer_env=sanitizer_env,
+            )
+        except TypeError:
+            return get_target("mxml").run(
+                document,
+                timeout_s=timeout_s,
+                extra_args=extra_args,
+                slow_threshold_s=slow_threshold_s,
+            )
 
-    env = {**os.environ, **SANITIZER_ENV}
+    env_vars = get_sanitizer_env(sanitizers, sanitizer_env)
+    env = {**os.environ, **env_vars}
     sha = hashlib.sha256(document).hexdigest()
     started = time.monotonic()
 
@@ -203,7 +276,8 @@ def run_one(
         if line.startswith("DIAG\t")
     ]
 
-    saw_sanitizer = any(m in stderr for m in SANITIZER_MARKERS)
+    detected_san = detect_sanitizer(stderr)
+    saw_sanitizer = bool(detected_san) or any(m in stderr for m in SANITIZER_MARKERS)
 
     if rc < 0 or saw_sanitizer:
         outcome = Outcome.CRASH
@@ -233,4 +307,5 @@ def run_one(
         input_len=len(document),
         is_slow=is_slow,
         slow_threshold_s=slow_threshold_s,
+        sanitizer=detected_san,
     )

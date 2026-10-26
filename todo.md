@@ -27,11 +27,11 @@ This document outlines potential improvements and new features for Stratagem, th
 ## Medium Priority
 
 ### Coverage & Analysis
-- [ ] Add support for additional sanitizers (ThreadSanitizer, MemorySanitizer)
-- [ ] Implement more sophisticated crash triage (bug clustering, deduplication)
-- [ ] Add automatic minimal reproducer generation
-- [ ] Implement statistical significance testing for coverage improvements
-- [ ] Add visual coverage reports (HTML/interactive dashboards)
+- [x] Add support for additional sanitizers (ThreadSanitizer, MemorySanitizer)
+- [x] Implement more sophisticated crash triage (bug clustering, deduplication)
+- [x] Add automatic minimal reproducer generation
+- [x] Implement statistical significance testing for coverage improvements
+- [x] Add visual coverage reports (HTML/interactive dashboards)
 
 ### Grammar Support
 - [ ] Add support for additional grammar formats (EBNF, Yacc/Bison)

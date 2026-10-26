@@ -105,6 +105,7 @@ class Campaign:
     checkpoint_interval: int = 50
     resume: bool = False
     incremental_flush: bool = True
+    generate_reproducers: bool = True
 
     def run(self) -> dict:
         if not 1 <= self.max_examples <= MAX_EXAMPLES_PER_ITERATION:
@@ -427,6 +428,31 @@ class Campaign:
             self.out_dir / corpus.DISTILLED_CORPUS_NAME
         )
 
+        # Automatic Minimal Reproducer Generation
+        reproducers_manifest: list[dict] = []
+        if self.generate_reproducers and crash_inputs:
+            from fuzzer.reproducer import create_reproducer_bundle
+            repro_dir = self.out_dir / "reproducers"
+            seen_sigs: set[str] = set()
+            for c_sha, c_payload, c_stderr in crash_inputs:
+                c_rep = triage.parse_report(c_stderr)
+                c_sig = c_rep.signature if c_rep else "crash"
+                if c_sig in seen_sigs:
+                    continue
+                seen_sigs.add(c_sig)
+                try:
+                    b_dir = repro_dir / c_sig
+                    b_bundle = create_reproducer_bundle(
+                        payload=c_payload,
+                        target=target_obj,
+                        out_dir=b_dir,
+                        minimize_first=True,
+                        signature=c_sig,
+                    )
+                    reproducers_manifest.append(b_bundle.to_json())
+                except Exception:
+                    pass
+
         summary = self._summarize(
             results, feats, crash_records, elapsed, shrunk_failure, target_obj
         )
@@ -441,6 +467,7 @@ class Campaign:
         summary["slow_input_count"] = len(slow_inputs)
         summary["slow_threshold_s"] = self.slow_threshold_s
         summary["timeout_threshold_s"] = self.timeout_s
+        summary["reproducers"] = reproducers_manifest
 
         if batch_history:
             summary["batch_history"] = batch_history
@@ -536,6 +563,8 @@ class Campaign:
             "slowest_inputs": slowest,
             "structure": target_obj.summarize_structure(feats),
             "crash_groups": triage.group(crash_records),
+            "clusters": [c.to_json() for c in triage.cluster_crashes(crash_records)],
+            "triage_summary": triage.triage_summary(crash_records),
             "shrunk_failure": shrunk,
         }
 

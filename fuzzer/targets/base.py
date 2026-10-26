@@ -31,6 +31,8 @@ from fuzzer.runner import (
     Outcome,
     RunResult,
     _signal_name,
+    detect_sanitizer,
+    get_sanitizer_env,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -79,6 +81,16 @@ class BaseTarget(abc.ABC):
         """Aggregate feature statistics over a batch of inputs."""
         raise NotImplementedError
 
+    # Supported sanitizers for native binaries
+    supported_sanitizers: tuple[str, ...] = ("asan", "ubsan", "tsan", "msan")
+
+    def harness_for_sanitizer(self, sanitizer: str = "asan") -> Path | None:
+        """Get the compiled harness binary for the given sanitizer if available."""
+        p = REPO_ROOT / "build" / sanitizer / "harness"
+        if p.exists() and os.access(str(p), os.X_OK):
+            return p
+        return self.harness_binary
+
     def run_native(
         self,
         payload: bytes,
@@ -86,9 +98,12 @@ class BaseTarget(abc.ABC):
         timeout_s: float = PER_RUN_TIMEOUT_S,
         extra_args: tuple[str, ...] = (),
         slow_threshold_s: float | None = None,
+        sanitizers: tuple[str, ...] | None = None,
+        sanitizer_env: dict[str, str] | None = None,
     ) -> RunResult:
         """Execute a compiled harness binary using the standard line protocol."""
-        env = {**os.environ, **SANITIZER_ENV}
+        env_vars = get_sanitizer_env(sanitizers, sanitizer_env)
+        env = {**os.environ, **env_vars}
         sha = hashlib.sha256(payload).hexdigest()
         started = time.monotonic()
 
@@ -128,7 +143,8 @@ class BaseTarget(abc.ABC):
         # Normalize through the target's diagnostic normalizer
         diagnostics = [self.normalize_diagnostic(d) for d in raw_diags]
 
-        saw_sanitizer = any(m in stderr for m in SANITIZER_MARKERS)
+        detected_san = detect_sanitizer(stderr)
+        saw_sanitizer = bool(detected_san) or any(m in stderr for m in SANITIZER_MARKERS)
 
         if rc < 0 or saw_sanitizer:
             outcome = Outcome.CRASH
@@ -155,6 +171,7 @@ class BaseTarget(abc.ABC):
             input_len=len(payload),
             is_slow=is_slow,
             slow_threshold_s=slow_threshold_s,
+            sanitizer=detected_san,
         )
 
     def run_reference(
@@ -162,6 +179,9 @@ class BaseTarget(abc.ABC):
         payload: bytes,
         timeout_s: float = PER_RUN_TIMEOUT_S,
         extra_args: tuple[str, ...] = (),
+        slow_threshold_s: float | None = None,
+        sanitizers: tuple[str, ...] | None = None,
+        sanitizer_env: dict[str, str] | None = None,
     ) -> RunResult:
         """Run reference / in-process / fallback parser implementation.
 
@@ -176,19 +196,43 @@ class BaseTarget(abc.ABC):
         timeout_s: float = PER_RUN_TIMEOUT_S,
         extra_args: tuple[str, ...] = (),
         slow_threshold_s: float | None = None,
+        sanitizers: tuple[str, ...] | None = None,
+        sanitizer_env: dict[str, str] | None = None,
     ) -> RunResult:
         """Execute input against this target.
 
         Uses the native binary if available and executable; otherwise falls
         back to the target's reference runner.
         """
-        if self.harness_binary and self.harness_binary.exists() and os.access(str(self.harness_binary), os.X_OK):
-            res = self.run_native(payload, self.harness_binary, timeout_s, extra_args, slow_threshold_s=slow_threshold_s)
+        active_binary = self.harness_binary
+        if sanitizers and len(sanitizers) == 1:
+            active_binary = self.harness_for_sanitizer(sanitizers[0]) or active_binary
+
+        if active_binary and active_binary.exists() and os.access(str(active_binary), os.X_OK):
+            res = self.run_native(
+                payload,
+                active_binary,
+                timeout_s,
+                extra_args,
+                slow_threshold_s=slow_threshold_s,
+                sanitizers=sanitizers,
+                sanitizer_env=sanitizer_env,
+            )
         else:
             try:
-                res = self.run_reference(payload, timeout_s, extra_args, slow_threshold_s=slow_threshold_s)
+                res = self.run_reference(
+                    payload,
+                    timeout_s,
+                    extra_args,
+                    slow_threshold_s=slow_threshold_s,
+                    sanitizers=sanitizers,
+                    sanitizer_env=sanitizer_env,
+                )
             except TypeError:
-                res = self.run_reference(payload, timeout_s, extra_args)
+                try:
+                    res = self.run_reference(payload, timeout_s, extra_args, slow_threshold_s=slow_threshold_s)
+                except TypeError:
+                    res = self.run_reference(payload, timeout_s, extra_args)
 
         if slow_threshold_s is not None and res.duration_s >= slow_threshold_s:
             res.is_slow = True

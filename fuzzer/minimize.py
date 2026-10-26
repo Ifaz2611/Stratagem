@@ -145,3 +145,33 @@ def verify(m: Minimized, harness: Path = DEFAULT_HARNESS,
     m.verified_runs = runs
     m.verified_ok = ok
     return m
+
+
+def minimize_payload(
+    payload: bytes,
+    target: Any = "mxml",
+    expected_signature: str | None = None,
+    timeout_s: float = 30.0,
+) -> bytes:
+    """Minimise an arbitrary crashing payload using hierarchical delta debugging."""
+    from fuzzer.reproducer import DeltaDebugger, build_crash_oracle
+    oracle = build_crash_oracle(target=target, expected_signature=expected_signature)
+    dd = DeltaDebugger(oracle=oracle, timeout_s=timeout_s)
+    return dd.minimize(payload)
+
+
+def generate_reproducer_bundle(
+    payload: bytes,
+    target: Any = "mxml",
+    out_dir: Path | None = None,
+    signature: str | None = None,
+) -> Any:
+    """Generate standalone reproducer bundle with test scripts and metadata."""
+    from fuzzer.reproducer import create_reproducer_bundle
+    return create_reproducer_bundle(
+        payload=payload,
+        target=target,
+        out_dir=out_dir,
+        signature=signature,
+    )
+
