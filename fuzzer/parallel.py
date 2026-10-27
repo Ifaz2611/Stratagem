@@ -17,8 +17,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from fuzzer import triage
-from fuzzer.campaign import Campaign, MAX_EXAMPLES_PER_ITERATION, MAX_WALL_CLOCK_S
-from fuzzer.runner import DEFAULT_HARNESS
+from fuzzer.campaign import Campaign, MAX_WALL_CLOCK_S
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -40,6 +39,11 @@ class CampaignTask:
     checkpoint_interval: int = 50
     adaptive_batch: bool = False
     resume: bool = False
+    use_result_cache: bool = False
+    result_cache_dir: Path | str | None = None
+    result_cache_size: int | None = 200_000
+    result_cache_ttl_s: float | None = None
+    max_corpus_entries: int | None = None
 
     def to_campaign(self, base_out_dir: Path | None = None) -> Campaign:
         """Instantiate a Campaign object from this task specification."""
@@ -64,6 +68,11 @@ class CampaignTask:
             checkpoint_interval=self.checkpoint_interval,
             adaptive_batch=self.adaptive_batch,
             resume=self.resume,
+            use_result_cache=self.use_result_cache,
+            result_cache_dir=self.result_cache_dir,
+            result_cache_size=self.result_cache_size,
+            result_cache_ttl_s=self.result_cache_ttl_s,
+            max_corpus_entries=self.max_corpus_entries,
         )
 
 
@@ -229,6 +238,11 @@ def run_parallel_targets(
     max_workers: int | None = None,
     mode: str = "survey",
     adaptive_batch: bool = False,
+    use_result_cache: bool = False,
+    result_cache_dir: Path | str | None = None,
+    result_cache_size: int | None = 200_000,
+    result_cache_ttl_s: float | None = None,
+    max_corpus_entries: int | None = None,
 ) -> ParallelRunSummary:
     """Helper to run one strategy across multiple targets concurrently."""
     tasks = [
@@ -239,6 +253,11 @@ def run_parallel_targets(
             max_examples=max_examples,
             mode=mode,
             adaptive_batch=adaptive_batch,
+            use_result_cache=use_result_cache,
+            result_cache_dir=result_cache_dir,
+            result_cache_size=result_cache_size,
+            result_cache_ttl_s=result_cache_ttl_s,
+            max_corpus_entries=max_corpus_entries,
         )
         for tgt in targets
     ]

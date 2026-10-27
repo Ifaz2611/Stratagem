@@ -7,6 +7,12 @@ runs/.validate/
 # Reusable strategy cache (opt-in). Entries are regenerable from run artifacts.
 runs/.strategy_cache/
 
+# Performance caches. Both are content-addressed or keyed on the harness
+# fingerprint, so they are disposable and should never be committed.
+runs/.bytecode/
+runs/.result_cache/
+runs/dist/
+
 # Secrets. Only .env.example is committed.
 .env
 .env.local

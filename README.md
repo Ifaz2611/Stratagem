@@ -22,6 +22,7 @@ Stratagem explores a novel approach to grammar-based fuzzing by using LLMs as th
 - **Grammar-Based**: Uses ANTLR grammars adapted for target parsers
 - **Sanitizer Integration**: AddressSanitizer and UndefinedBehaviorSanitizer for crash detection
 - **Reproducible**: All LLM interactions are recorded for replay without credentials
+- **Performance & Scale**: Bytecode caching, deterministic result caching, memory-bounded corpora, and distributed filesystem sharding
 - **Developer Tooling**: Hermetic loop tests, actionable errors, a run debugger, progress bars and CI/CD workflows
 
 ### Project Structure
@@ -45,6 +46,9 @@ Stratagem explores a novel approach to grammar-based fuzzing by using LLMs as th
 │   └── prompts/     # Prompt templates (v1-v5)
 ├── fuzzer/          # Fuzzing engine
 │   ├── campaign.py  # Run strategies through harness
+│   ├── strategy_loader.py # Content-addressed bytecode cache
+│   ├── result_cache.py    # Deterministic SQLite result cache
+│   ├── distributed.py     # Filesystem-coordinated distributed fuzzing
 │   ├── runner.py    # Execute harness and classify results
 │   ├── features.py  # Analyze generated documents
 │   ├── strategies/  # Generated strategy modules

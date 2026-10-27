@@ -60,10 +60,10 @@ This document outlines potential improvements and new features for Stratagem, th
 - [x] Add case studies from past findings
 
 ### Performance
-- [ ] Implement strategy compilation to bytecode
-- [ ] Add result caching for deterministic strategies
-- [ ] Optimize memory usage for large corpora
-- [ ] Implement distributed fuzzing support
+- [x] Implement strategy compilation to bytecode
+- [x] Add result caching for deterministic strategies
+- [x] Optimize memory usage for large corpora
+- [x] Implement distributed fuzzing support
 
 ## Research & Experimentation
 

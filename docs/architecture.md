@@ -817,6 +817,72 @@ stratagem/
 └── requirements.txt
 ```
 
+## Performance Architecture
+
+Stratagem includes a dedicated high-performance execution layer designed to scale campaigns to large corpora and distributed clusters without external dependencies.
+
+```mermaid
+flowchart TD
+    subgraph Campaign["Campaign Execution"]
+        Gen["Hypothesis Strategy Generator"]
+        Loader["StrategyLoader
+(Content-Addressed Bytecode Cache)"]
+        Cache["ResultCache
+(SQLite + Binary Fingerprint)"]
+        TargetRun["Target Binary Execution"]
+        Writer["CorpusWriter
+(Streaming Gzip)"]
+        Mgr["CorpusManager
+(Slots + Bounded Eviction)"]
+    end
+
+    subgraph Distributed["Distributed Fuzzing"]
+        Plan["plan_shards()"]
+        Worker1["Worker 1 (Node A)"]
+        Worker2["Worker 2 (Node B)"]
+        Claims["claims/<id>.json
+(Atomic O_EXCL)"]
+        Done["done/<id>.json"]
+        Merge["merge_results()
+(Aggregated Summary + Merged Corpus)"]
+    end
+
+    Loader --> Gen
+    Gen --> TargetRun
+    TargetRun --> Cache
+    TargetRun --> Writer
+    Writer --> Mgr
+    Plan --> Worker1 & Worker2
+    Worker1 & Worker2 --> Claims
+    Worker1 & Worker2 --> Done
+    Done --> Merge
+```
+
+### Key Components
+
+1. **Strategy Bytecode Compilation (`fuzzer.strategy_loader`)**:
+   - Content-addressed bytecode caching under `runs/.bytecode/`.
+   - Avoids repetitive Python re-parsing overhead while ensuring isolated, fresh module namespace state per load.
+   - Transparently recovers from corrupted cache files without failing campaigns.
+
+2. **Deterministic Result Caching (`fuzzer.result_cache`)**:
+   - SQLite database storing outcomes keyed on execution context: target configuration, harness binary fingerprint (size, mtime, path), compiler flags, and input SHA-256.
+   - Automatically skips expensive process spawning for previously observed inputs under deterministic targets.
+   - Thread-safe WAL mode and automatic oldest-entry pruning.
+
+3. **Memory Optimization for Large Corpora (`fuzzer.corpus`)**:
+   - `CorpusEntry` uses `__slots__` to remove per-instance dictionary overhead.
+   - Lazy behavioral signature construction ensures zero memory overhead when semantic deduplication is not requested.
+   - Bounded corpus via `max_entries` with greedy coverage-guided batch eviction that strictly preserves all unique crash inputs.
+   - Streaming `CorpusWriter` writes compressed gzip entries incrementally, eliminating monolithic in-memory payload arrays.
+
+4. **Distributed Fuzzing (`fuzzer.distributed`)**:
+   - Filesystem-coordinated sharding across processes or nodes without central broker servers.
+   - Atomic shard reservation using `O_EXCL` file locks with lease-based stale claim recovery.
+   - Automated result merger combining shard summaries, triage groupings, and deduplicated corpora.
+
+---
+
 ## Key Design Principles
 
 1. **Blackbox Operation**: The loop does not use code coverage; it relies only on input properties and parser results.

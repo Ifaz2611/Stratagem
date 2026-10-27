@@ -28,9 +28,15 @@ CORPUS_NAME = "corpus.jsonl.gz"
 DISTILLED_CORPUS_NAME = "corpus_distilled.jsonl.gz"
 
 
-@dataclass
+@dataclass(slots=True)
 class CorpusEntry:
-    """A single input with its execution metadata and coverage characteristics."""
+    """A single input with its execution metadata and coverage characteristics.
+
+    ``slots`` matters at corpus scale: a million entries would otherwise carry
+    a million per-instance ``__dict__`` objects, which can dwarf the payloads
+    themselves. Every field is declared, so nothing relies on dynamic
+    attributes.
+    """
     payload: bytes
     sha256: str = ""
     outcome: str = "parsed_clean"
@@ -87,13 +93,32 @@ class CorpusEntry:
 
 
 class CorpusManager:
-    """Manages a collection of inputs with deduplication, distillation, and prioritization."""
+    """Manages a collection of inputs with deduplication, distillation, and prioritization.
 
-    def __init__(self, entries: list[CorpusEntry] | None = None) -> None:
+    ``max_entries`` is an optional memory ceiling. When it is set, the manager
+    evicts in batches using the same coverage-guided selection as
+    :meth:`distill`, so a long-running campaign or a million-line imported
+    corpus cannot grow without bound. The default is ``None``: behaviour for
+    existing callers is unchanged.
+    """
+
+    def __init__(self, entries: list[CorpusEntry] | None = None,
+                 max_entries: int | None = None,
+                 evict_batch: int | None = None) -> None:
+        if max_entries is not None and max_entries < 1:
+            raise ValueError(f"max_entries must be >= 1, got {max_entries}")
         self.entries: list[CorpusEntry] = []
         self._sha_set: set[str] = set()
-        self._sig_set: set[tuple] = set()
+        # Signature tracking is only paid for when semantic deduplication is
+        # actually used. The default survey path adds every input and never
+        # needs a tuple of all diagnostics/productions per entry.
+        self._sig_set: set[tuple] | None = None
         self.duplicates_rejected: int = 0
+        self.max_entries = max_entries
+        self.evict_batch = max(
+            1, int(evict_batch) if evict_batch is not None
+            else max(1, (max_entries or 0) // 10))
+        self.evicted: int = 0
 
         if entries:
             for e in entries:
@@ -133,6 +158,11 @@ class CorpusManager:
             deduplicate_semantic=deduplicate_semantic,
         )
 
+    def _ensure_signatures(self) -> set[tuple]:
+        if self._sig_set is None:
+            self._sig_set = {e.behavioral_signature for e in self.entries}
+        return self._sig_set
+
     def add_entry(
         self,
         entry: CorpusEntry,
@@ -145,14 +175,69 @@ class CorpusManager:
             return False
 
         sig = entry.behavioral_signature
-        if deduplicate_semantic and sig in self._sig_set:
+        if deduplicate_semantic and sig in self._ensure_signatures():
             self.duplicates_rejected += 1
             return False
 
         self.entries.append(entry)
         self._sha_set.add(entry.sha256)
-        self._sig_set.add(sig)
+        if self._sig_set is not None:
+            self._sig_set.add(sig)
+        self._maybe_evict()
         return True
+
+    def _maybe_evict(self) -> None:
+        """Trim in batches once the corpus is meaningfully over its ceiling."""
+        if self.max_entries is None:
+            return
+        if len(self.entries) > self.max_entries + self.evict_batch:
+            self.trim(self.max_entries)
+
+    def trim(self, max_entries: int | None = None) -> int:
+        """Reduce the corpus to ``max_entries``, preserving coverage and crashes.
+
+        Returns the number of entries dropped. Crashes are selected first so a
+        memory ceiling cannot turn a known bug into a silent omission.
+        """
+        limit = self.max_entries if max_entries is None else max_entries
+        if limit is None or len(self.entries) <= limit:
+            return 0
+        if limit < 1:
+            raise ValueError(f"max_entries must be >= 1, got {limit}")
+
+        crashes = [e for e in self.entries if e.outcome in ("crash", "timeout")]
+        selected_crash = crashes[:limit]
+        slot_count = max(0, limit - len(selected_crash))
+        selected = list(selected_crash)
+        if slot_count:
+            chosen = self.select_coverage_guided(max_count=slot_count)
+            chosen_shas = {e.sha256 for e in selected}
+            for e in chosen:
+                if e.sha256 in chosen_shas:
+                    continue
+                selected.append(e)
+                chosen_shas.add(e.sha256)
+                if len(selected) >= limit:
+                    break
+
+        before = len(self.entries)
+        if len(selected) < limit:
+            chosen_shas = {e.sha256 for e in selected}
+            for e in self.entries:
+                if e.sha256 in chosen_shas:
+                    continue
+                selected.append(e)
+                chosen_shas.add(e.sha256)
+                if len(selected) >= limit:
+                    break
+
+        self.entries = selected
+        self._sha_set = {e.sha256 for e in selected}
+        if self._sig_set is not None:
+            self._sig_set = {e.behavioral_signature for e in selected}
+        dropped = before - len(selected)
+        self.evicted += dropped
+        return dropped
 
     def deduplicate_exact(self) -> int:
         """Prune exact duplicates in-place. Returns count of duplicates removed."""
@@ -167,6 +252,8 @@ class CorpusManager:
                 unique.append(e)
         self.entries = unique
         self._sha_set = seen
+        if self._sig_set is not None:
+            self._sig_set = {e.behavioral_signature for e in unique}
         self.duplicates_rejected += removed
         return removed
 
@@ -293,7 +380,6 @@ class CorpusManager:
         # Count feature frequencies
         prod_freq: dict[str, int] = {}
         diag_freq: dict[str, int] = {}
-        total = len(self.entries)
 
         for e in self.entries:
             for p in e.productions:
@@ -395,6 +481,11 @@ class CorpusManager:
         """Return all payloads in current corpus."""
         return [e.payload for e in self.entries]
 
+    def iter_payloads(self):
+        """Iterate payloads without materializing a second list."""
+        for e in self.entries:
+            yield e.payload
+
     def stats(self) -> dict:
         """Return aggregate corpus metrics."""
         all_prods: set[str] = set()
@@ -414,45 +505,125 @@ class CorpusManager:
             "productions_covered": len(all_prods),
             "diagnostics_covered": len(all_diags),
             "crashes": crashes,
+            "evicted": self.evicted,
+            "max_entries": self.max_entries,
+            "signatures_tracked": self._sig_set is not None,
+        }
+
+    def memory_stats(self) -> dict:
+        """A compact view of the manager's retained state."""
+        return {
+            "entries": len(self.entries),
+            "payload_bytes": sum(e.length for e in self.entries),
+            "diagnostics": sum(len(e.diagnostics) for e in self.entries),
+            "productions": sum(len(e.productions) for e in self.entries),
+            "sha_set": len(self._sha_set),
+            "signatures_tracked": (
+                None if self._sig_set is None else len(self._sig_set)),
+            "max_entries": self.max_entries,
+            "evicted": self.evicted,
         }
 
 
+# ------------------------------------------------------------ streaming writer
+class CorpusWriter:
+    """Write corpus records as inputs are produced.
+
+    The campaign used to retain every payload until the end and then serialize
+    the whole list in one call. That is a second full copy of the corpus at
+    peak, and it cannot be checkpointed incrementally. This writer appends one
+    gzip member per run, so a resume continues the same file instead of
+    rewriting it, while the digest and manifest stay identical to
+    :func:`write_corpus`.
+    """
+
+    def __init__(
+        self,
+        path: Path | str,
+        *,
+        append: bool = False,
+        start_count: int = 0,
+        initial_raw_bytes: int = 0,
+        initial_digest: Any = None,
+    ) -> None:
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.count = int(start_count)
+        self.raw_bytes = int(initial_raw_bytes)
+        self._digest = initial_digest.copy() if initial_digest is not None \
+            else hashlib.sha256()
+        self._fh = gzip.open(self.path, "at" if append else "wt",
+                             encoding="utf-8")
+        self._closed = False
+
+    def add(self, payload: bytes) -> None:
+        if self._closed:
+            raise ValueError("corpus writer is closed")
+        sha = hashlib.sha256(payload)
+        self._fh.write(json.dumps({
+            "i": self.count,
+            "sha": sha.hexdigest()[:16],
+            "b64": base64.b64encode(payload).decode("ascii"),
+        }) + "\n")
+        self.count += 1
+        self.raw_bytes += len(payload)
+        self._digest.update(sha.digest())
+
+    def manifest(self) -> dict:
+        """Current manifest. Flushes but leaves the writer open."""
+        if not self._closed:
+            self._fh.flush()
+        return {
+            "file": self.path.name,
+            "count": self.count,
+            "raw_bytes": self.raw_bytes,
+            "stored_bytes": self.path.stat().st_size,
+            "corpus_digest": self._digest.hexdigest()[:16],
+        }
+
+    def close(self) -> dict:
+        if not self._closed:
+            self._fh.close()
+            self._closed = True
+        return self.manifest()
+
+    def __enter__(self) -> "CorpusWriter":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
+
+
 # ---------------------------------------------------------------- Backward-compatible API
-def write_corpus(path: Path, payloads: list[bytes]) -> dict:
-    """Write the campaign's inputs. Returns a manifest for the summary."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    total = 0
-    with gzip.open(path, "wt", encoding="utf-8") as fh:
-        for i, p in enumerate(payloads):
-            total += len(p)
-            fh.write(json.dumps({
-                "i": i,
-                "sha": hashlib.sha256(p).hexdigest()[:16],
-                "b64": base64.b64encode(p).decode("ascii"),
-            }) + "\n")
-    digest = hashlib.sha256()
-    for p in payloads:
-        digest.update(hashlib.sha256(p).digest())
-    return {
-        "file": path.name,
-        "count": len(payloads),
-        "raw_bytes": total,
-        "stored_bytes": path.stat().st_size,
-        "corpus_digest": digest.hexdigest()[:16],
-    }
+def write_corpus(path: Path, payloads) -> dict:
+    """Write a campaign's inputs from any iterable. Returns a manifest.
+
+    Accepting an iterable means callers can pass ``CorpusManager.iter_payloads``
+    or a generator over a large file without first materializing a list.
+    """
+    writer = CorpusWriter(path)
+    try:
+        for p in payloads:
+            writer.add(p)
+    finally:
+        manifest = writer.close()
+    return manifest
 
 
-def read_corpus(path: Path) -> list[bytes]:
-    out: list[bytes] = []
+def iter_corpus(path: Path):
+    """Yield corpus payloads one record at a time."""
     with gzip.open(path, "rt", encoding="utf-8") as fh:
         for line in fh:
             line = line.strip()
             if line:
-                out.append(base64.b64decode(json.loads(line)["b64"]))
-    return out
+                yield base64.b64decode(json.loads(line)["b64"])
 
 
-def corpus_digest(payloads: list[bytes]) -> str:
+def read_corpus(path: Path) -> list[bytes]:
+    return list(iter_corpus(path))
+
+
+def corpus_digest(payloads) -> str:
     d = hashlib.sha256()
     for p in payloads:
         d.update(hashlib.sha256(p).digest())

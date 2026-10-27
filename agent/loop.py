@@ -190,6 +190,11 @@ class Loop:
     # keep the recorded artifact set unchanged, on when diagnosing.
     debug: bool = False
 
+    # ---- performance enhancements
+    use_result_cache: bool = False
+    result_cache_dir: str | Path | None = None
+    max_corpus_entries: int | None = None
+
     budget: Budget = field(init=False)
     out: Path = field(init=False)
 
@@ -215,6 +220,9 @@ class Loop:
                 f"screening_examples must be 1..{MAX_EXAMPLES_PER_ITERATION}")
         if not 0.0 <= self.cache_similarity <= 1.0:
             raise ValueError("cache_similarity must be 0..1")
+        if self.max_corpus_entries is not None and self.max_corpus_entries < 1:
+            raise ValueError(
+                f"max_corpus_entries must be >= 1, got {self.max_corpus_entries}")
         self.progress_mode = normalize_mode(self.progress_mode)
         self.status_mode = normalize_mode(self.status_mode)
         self.budget = Budget(self.max_iterations, self.max_usd)
@@ -829,10 +837,15 @@ class Loop:
             screen_dir = (self.out / "iterations" / f"iter-{it}" /
                           "screening" / f"candidate-{idx}")
             try:
-                summary = Campaign(name, screen_examples, screen_dir,
-                                   mode="survey", target=self.target,
-                                   random_seed=1000 + it,
-                                   progress=self.progress_mode).run()
+                summary = Campaign(
+                    name, screen_examples, screen_dir,
+                    mode="survey", target=self.target,
+                    random_seed=1000 + it,
+                    progress=self.progress_mode,
+                    use_result_cache=self.use_result_cache,
+                    result_cache_dir=self.result_cache_dir,
+                    max_corpus_entries=self.max_corpus_entries,
+                ).run()
             except Exception as exc:
                 err = f"{type(exc).__name__}: {exc}"
                 print(f"    [ensemble] candidate {idx} screening failed: {err[:160]}")
@@ -997,9 +1010,14 @@ class Loop:
                 err = v.error or v.stage
                 continue
             try:
-                summary = Campaign(name, run_examples, idir, mode="survey",
-                                   target=self.target,
-                                   progress=self.progress_mode).run()
+                summary = Campaign(
+                    name, run_examples, idir, mode="survey",
+                    target=self.target,
+                    progress=self.progress_mode,
+                    use_result_cache=self.use_result_cache,
+                    result_cache_dir=self.result_cache_dir,
+                    max_corpus_entries=self.max_corpus_entries,
+                ).run()
             except Exception as again:
                 err = f"{type(again).__name__}: {again}"
                 print(f"    [run] campaign failed again: {err[:120]}")
@@ -1139,9 +1157,14 @@ class Loop:
                         examples=examples, target=self.target)
             campaign_failed = False
             try:
-                summary = Campaign(name, examples, idir, mode="survey",
-                                   target=self.target,
-                                   progress=self.progress_mode).run()
+                summary = Campaign(
+                    name, examples, idir, mode="survey",
+                    target=self.target,
+                    progress=self.progress_mode,
+                    use_result_cache=self.use_result_cache,
+                    result_cache_dir=self.result_cache_dir,
+                    max_corpus_entries=self.max_corpus_entries,
+                ).run()
             except Exception as exc:
                 # The validation gate draws a few dozen documents, so a branch
                 # it never took can still fail at 500. A strategy that dies
@@ -1362,6 +1385,14 @@ def main() -> None:
     grp_dx.add_argument("--debug", action="store_true",
                         help="write structured events to runs/<id>/debug.jsonl "
                              "and print tracebacks on failure")
+
+    grp_perf = ap.add_argument_group("performance enhancements")
+    grp_perf.add_argument("--cache-results", action="store_true",
+                          help="reuse harness results for identical inputs")
+    grp_perf.add_argument("--result-cache-dir", default=None,
+                          help="directory for harness result cache database")
+    grp_perf.add_argument("--max-corpus-entries", type=int, default=None,
+                          help="ceiling on in-memory corpus size")
     a = ap.parse_args()
 
     # .env is read here rather than at import time, so importing the module for
@@ -1416,6 +1447,9 @@ def main() -> None:
             progress_mode=a.progress_mode,
             status_mode=a.status_mode,
             debug=a.debug,
+            use_result_cache=a.cache_results,
+            result_cache_dir=a.result_cache_dir,
+            max_corpus_entries=a.max_corpus_entries,
         )
         final = loop.run()
     except KeyboardInterrupt:

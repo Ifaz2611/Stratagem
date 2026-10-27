@@ -34,6 +34,7 @@ import time
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+from typing import Any
 
 # Cap each harness invocation so a hang is recorded as a crash instead of
 # stalling the rest of the campaign.
@@ -145,6 +146,10 @@ class RunResult:
     is_slow: bool = False
     slow_threshold_s: float | None = None
     sanitizer: str | None = None
+    # True when the result came from the deterministic result cache rather
+    # than a fresh harness invocation. It is only recorded in the JSONL log
+    # when set, so existing artifacts are byte-identical with caching off.
+    cached: bool = False
 
     def to_json(self) -> dict:
         """Compact form for the JSONL log. stderr only kept when it matters."""
@@ -167,7 +172,38 @@ class RunResult:
             d["sanitizer"] = self.sanitizer
         if self.outcome.is_crash:
             d["stderr"] = self.stderr
+        if self.cached:
+            d["cached"] = True
         return d
+
+    @classmethod
+    def from_json(cls, data: dict) -> "RunResult":
+        """Rebuild a result serialized by :meth:`to_json`.
+
+        Used by the deterministic result cache. ``to_json`` truncates the SHA
+        to 16 characters for the JSONL log; the cache adds the full digest so
+        a cached result still names the input it came from.
+        """
+        outcome = data.get("outcome", Outcome.HARNESS_ERROR.value)
+        try:
+            outcome = Outcome(outcome)
+        except ValueError:
+            outcome = Outcome.HARNESS_ERROR
+        sha = data.get("input_sha256") or data.get("sha") or ""
+        return cls(
+            outcome=outcome,
+            returncode=int(data.get("rc", 0)),
+            signal_name=data.get("signal"),
+            diagnostics=list(data.get("diagnostics") or []),
+            stderr=data.get("stderr", ""),
+            duration_s=float(data.get("dur_ms", 0.0)) / 1000.0,
+            input_sha256=sha,
+            input_len=int(data.get("len", 0)),
+            is_slow=bool(data.get("is_slow")),
+            slow_threshold_s=data.get("slow_threshold_s"),
+            sanitizer=data.get("sanitizer"),
+            cached=bool(data.get("cached")),
+        )
 
 
 def _signal_name(rc: int) -> str | None:

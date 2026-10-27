@@ -11,6 +11,10 @@ This document provides API documentation for the key modules in Stratagem.
 - [Validation (`agent.validate`)](#validation-agentvalidate)
 - [Strategy Cache (`agent.strategy_cache`)](#strategy-cache-agentstrategy_cache)
 - [Ensemble (`agent.ensemble`)](#ensemble-agentensemble)
+- [Strategy Bytecode Loader (`fuzzer.strategy_loader`)](#strategy-bytecode-loader-fuzzerstrategy_loader)
+- [Result Cache (`fuzzer.result_cache`)](#result-cache-fuzzerresult_cache)
+- [Memory-Optimized Corpus (`fuzzer.corpus`)](#memory-optimized-corpus-fuzzercorpus)
+- [Distributed Fuzzing (`fuzzer.distributed`)](#distributed-fuzzing-fuzzerdistributed)
 
 ---
 
@@ -927,6 +931,196 @@ if result.is_valid:
     print("Strategy passed all gates")
 else:
     print(f"Failed: {result.reason}")
+```
+
+---
+
+## Strategy Bytecode Loader (`fuzzer.strategy_loader`)
+
+The bytecode loader caches compiled Hypothesis strategy code objects to disk using content-addressed hashes, avoiding re-parsing overhead while ensuring fresh module state on every campaign execution.
+
+### Main Classes
+
+#### `StrategyLoader`
+
+Content-addressed bytecode cache for strategy modules.
+
+```python
+class StrategyLoader:
+    def __init__(
+        self,
+        strategies_dir: Path | str | None = None,
+        cache_dir: Path | str | None = None,
+    ) -> None: ...
+```
+
+**Methods:**
+
+- `load(name: str, force: bool = False) -> LoadedStrategy`: Load strategy as a fresh module, using cached bytecode when valid.
+- `load_documents(name: str, force: bool = False) -> tuple[Any, LoadedStrategy]`: Convenience helper returning `(documents(), loaded)`.
+- `stats() -> dict[str, Any]`: Return cache hit and compilation statistics.
+- `clear() -> None`: Purge in-memory and on-disk bytecode caches.
+
+**CLI Usage:**
+
+```bash
+python -m fuzzer.strategy_loader --list
+python -m fuzzer.strategy_loader baseline
+```
+
+---
+
+## Result Cache (`fuzzer.result_cache`)
+
+Deterministic result cache backed by SQLite, preventing redundant process launches for previously measured identical inputs under deterministic targets.
+
+### Main Classes
+
+#### `ResultCache`
+
+SQLite-backed cache of execution outcomes keyed on target configuration, harness binary fingerprint (mtime, size, path), execution flags, and input SHA-256.
+
+```python
+class ResultCache:
+    def __init__(
+        self,
+        path: Path | str,
+        *,
+        max_entries: int | None = 200_000,
+        ttl_s: float | None = None,
+        enabled: bool = True,
+    ) -> None: ...
+```
+
+**Methods:**
+
+- `context(target, harness=None, extra_args=(), timeout_s=5.0, ...) -> dict`: Build cache key context.
+- `key(context: dict, payload: bytes) -> str`: Compute stable SHA-256 hash key.
+- `get(key: str) -> RunResult | None`: Retrieve cached result if available and unexpired.
+- `put(key: str, result: RunResult) -> bool`: Store cacheable result (clean, diagnostic, rejection, crash).
+- `prune(max_entries: int | None = None) -> int`: Evict oldest entries down to capacity.
+
+---
+
+## Memory-Optimized Corpus (`fuzzer.corpus`)
+
+High-performance corpus management designed for millions of inputs with minimal memory footprint.
+
+### Main Classes
+
+#### `CorpusEntry`
+
+Lightweight input entry utilizing `__slots__` to eliminate per-instance dictionary overhead.
+
+```python
+@dataclass(slots=True)
+class CorpusEntry:
+    payload: bytes
+    sha256: str = ""
+    outcome: str = "parsed_clean"
+    diagnostics: list[str] = field(default_factory=list)
+    productions: list[str] = field(default_factory=list)
+    features: dict[str, Any] = field(default_factory=dict)
+    duration_ms: float = 0.0
+    length: int = 0
+    tag: str = ""
+    score: float = 0.0
+```
+
+#### `CorpusManager`
+
+Manages corpus with lazy signature indexing, bounded memory with coverage-guided eviction, and crash preservation.
+
+```python
+class CorpusManager:
+    def __init__(
+        self,
+        entries: list[CorpusEntry] | None = None,
+        max_entries: int | None = None,
+        evict_batch: int | None = None,
+    ) -> None: ...
+```
+
+**Key Features:**
+- Lazy behavioral signature initialization: only constructed if semantic deduplication is invoked.
+- `max_entries` ceiling: triggers batch eviction via greedy set cover while strictly preserving all unique crashes.
+- `trim(max_entries)`: explicitly reduces memory to target entry count.
+
+#### `CorpusWriter`
+
+Streaming gzip writer for campaign inputs (`corpus.jsonl.gz`) avoiding holding all payloads in memory simultaneously.
+
+---
+
+## Distributed Fuzzing (`fuzzer.distributed`)
+
+Filesystem-coordinated distributed fuzzing engine without external broker dependencies. Shards campaigns across multiple workers or nodes sharing a network mount or directory.
+
+### Main Functions and Classes
+
+#### `plan_shards`
+
+Create a deterministic shard plan with non-overlapping random seeds.
+
+```python
+def plan_shards(
+    work_dir: Path | str,
+    *,
+    strategies: Iterable[str],
+    targets: Iterable[str],
+    examples: int = 500,
+    shards: int = 4,
+    seed: int | None = 0,
+    mode: str = "survey",
+    ...
+) -> DistributedPlan: ...
+```
+
+#### `run_worker`
+
+Claim and run shards atomically using `O_EXCL` file locks and lease timeouts.
+
+```python
+def run_worker(
+    work_dir: Path | str,
+    worker_id: str | None = None,
+    *,
+    once: bool = False,
+    poll_s: float = 2.0,
+    lease_s: float = 6 * 3600.0,
+    idle_timeout_s: float | None = 300.0,
+    ...
+) -> dict[str, Any]: ...
+```
+
+#### `merge_results`
+
+Aggregate shard outcomes, triaged crash reports, and corpora into a unified report (`distributed_summary.json` and `merged_corpus.jsonl.gz`).
+
+```python
+def merge_results(
+    work_dir: Path | str,
+    *,
+    lease_s: float = 6 * 3600.0,
+    write: bool = True,
+    ...
+) -> dict[str, Any]: ...
+```
+
+**CLI Commands:**
+
+```bash
+# 1. Create a shard plan
+python -m fuzzer.distributed plan --workdir runs/dist --strategy baseline --target mxml --examples 2000 --shards 4
+
+# 2. Run workers (on one or many nodes)
+python -m fuzzer.distributed work --workdir runs/dist --worker-id node-1
+
+# 3. Check status
+python -m fuzzer.distributed status --workdir runs/dist
+
+# 4. Merge results
+python -m fuzzer.distributed merge --workdir runs/dist
 ```
 
 ---

@@ -14,20 +14,20 @@ Features:
 from __future__ import annotations
 
 import argparse
-import importlib
+import heapq
 import json
 import signal
 import statistics
+import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from hypothesis import HealthCheck, given, settings
 from hypothesis import seed as hyp_seed
-from hypothesis import strategies as st
 
-from fuzzer import corpus, diagnostics, features, triage
+from fuzzer import corpus, triage
 from fuzzer.batching import (
     AdaptiveBatchConfig,
     AdaptiveBatchController,
@@ -38,8 +38,9 @@ from fuzzer.runner import (
     DEFAULT_SLOW_THRESHOLD_S,
     PER_RUN_TIMEOUT_S,
     Outcome,
-    run_one,
 )
+from fuzzer.result_cache import ResultCache, cache_enabled_by_env
+from fuzzer.strategy_loader import StrategyLoader, get_default_loader
 from agent.progress import make_progress
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -107,6 +108,15 @@ class Campaign:
     resume: bool = False
     incremental_flush: bool = True
     generate_reproducers: bool = True
+    # Performance features. All default to the pre-existing behaviour: the
+    # bytecode cache is transparent, result caching is opt-in, and corpus
+    # trimming only happens when a ceiling is requested.
+    use_result_cache: bool = False
+    result_cache_dir: Path | str | None = None
+    result_cache_size: int | None = 200_000
+    result_cache_ttl_s: float | None = None
+    max_corpus_entries: int | None = None
+    strategy_loader: StrategyLoader | None = None
     # auto = only when stderr is a terminal; on = also emit milestone lines in
     # CI logs; off = silent. The campaign never writes to stdout, so callers
     # can still parse its summary.
@@ -125,10 +135,9 @@ class Campaign:
                 f"got {self.wall_clock_cap_s}"
             )
 
-        importlib.invalidate_caches()
-        mod = importlib.import_module(f"fuzzer.strategies.{self.strategy_name}")
-        mod = importlib.reload(mod)
-        strat = mod.documents()
+        loader = self.strategy_loader or get_default_loader()
+        loaded = loader.load(self.strategy_name)
+        strat = loaded.documents()
 
         from fuzzer.targets import get_target
         target_obj = get_target(self.target)
@@ -139,36 +148,79 @@ class Campaign:
         slow_dir = self.out_dir / "slow_inputs"
         checkpoint_file = self.out_dir / "checkpoint.json"
         results_file = self.out_dir / "results.jsonl"
+        corpus_path = self.out_dir / corpus.CORPUS_NAME
 
         results: list[dict] = []
-        payloads: list[bytes] = []
         feats: list[Any] = []
         crash_records: list[dict] = []
         crash_inputs: list[tuple[str, bytes, str]] = []
         timeout_inputs: list[tuple[str, bytes, str, float]] = []
         slow_inputs: list[tuple[str, bytes, float]] = []
-        corpus_mgr = corpus.CorpusManager()
+        corpus_mgr = corpus.CorpusManager(max_entries=self.max_corpus_entries)
 
-        # Resumption support
+        # Result caching is opt-in (or enabled by environment for operators),
+        # and only for outcomes that a deterministic target reproduces.
+        cache: ResultCache | None = None
+        cache_context: dict[str, Any] | None = None
+        if self.use_result_cache or cache_enabled_by_env():
+            cache_root = (Path(self.result_cache_dir) if self.result_cache_dir
+                          else REPO_ROOT / "runs" / ".result_cache")
+            cache = ResultCache(
+                cache_root / "results.sqlite3",
+                max_entries=(self.result_cache_size or None),
+                ttl_s=self.result_cache_ttl_s,
+            )
+            cache_context = cache.context(
+                target_obj,
+                harness=self.harness,
+                extra_args=self.extra_args,
+                timeout_s=self.timeout_s,
+                slow_threshold_s=self.slow_threshold_s,
+            )
+
+        # Resumption support. Existing corpus records are streamed into the
+        # manager and folded into the writer's digest, so a resumed campaign
+        # appends to the same file instead of keeping a second payload list.
+        existing_count = 0
+        existing_raw_bytes = 0
+        existing_digest = None
         if self.resume and checkpoint_file.exists():
             try:
-                cp = json.loads(checkpoint_file.read_text(encoding="utf-8"))
+                checkpoint = json.loads(checkpoint_file.read_text(encoding="utf-8"))
+                if not isinstance(checkpoint, dict):
+                    raise ValueError("checkpoint is not an object")
                 if results_file.exists():
                     for line in results_file.read_text(encoding="utf-8").splitlines():
                         if line.strip():
                             rec = json.loads(line)
                             results.append(rec)
-                corpus_path = self.out_dir / corpus.CORPUS_NAME
                 if corpus_path.exists():
-                    payloads = corpus.read_corpus(corpus_path)
-                    for p in payloads:
+                    import hashlib
+                    existing_digest = hashlib.sha256()
+                    for p in corpus.iter_corpus(corpus_path):
                         corpus_mgr.add(p)
+                        existing_count += 1
+                        existing_raw_bytes += len(p)
+                        existing_digest.update(hashlib.sha256(p).digest())
                 if len(results) >= self.max_examples:
                     summary_path = self.out_dir / "summary.json"
                     if summary_path.exists():
                         return json.loads(summary_path.read_text(encoding="utf-8"))
             except Exception:
-                pass
+                # A partially written checkpoint or corpus is not a reason to
+                # fail the run; start the corpus over rather than mixing a
+                # partial digest with fresh records.
+                existing_count = 0
+                existing_raw_bytes = 0
+                existing_digest = None
+
+        writer = corpus.CorpusWriter(
+            corpus_path,
+            append=existing_count > 0,
+            start_count=existing_count,
+            initial_raw_bytes=existing_raw_bytes,
+            initial_digest=existing_digest,
+        )
 
         results_fh = results_file.open("a", encoding="utf-8")
         started = time.monotonic()
@@ -188,7 +240,7 @@ class Campaign:
         def _save_checkpoint(is_interrupted: bool = False) -> None:
             """Save incremental checkpoint to disk."""
             elapsed_now = time.monotonic() - started
-            manifest = corpus.write_corpus(self.out_dir / corpus.CORPUS_NAME, payloads)
+            manifest = writer.manifest()
             cp_data = {
                 "strategy": self.strategy_name,
                 "target": target_obj.name,
@@ -207,15 +259,12 @@ class Campaign:
 
         def _process_one(doc: str | bytes) -> None:
             nonlocal consecutive_timeouts
+            if time.monotonic() - started >= self.wall_clock_cap_s:
+                raise CampaignWallClockExceeded()
             payload = _encode(doc)
-            payloads.append(payload)
+            writer.add(payload)
 
-            r = target_obj.run(
-                payload,
-                timeout_s=self.timeout_s,
-                extra_args=self.extra_args,
-                slow_threshold_s=self.slow_threshold_s,
-            )
+            r = self._run_payload(payload, target_obj, cache, cache_context)
 
             text = doc if isinstance(doc, str) else doc.decode("utf-8", "replace")
             f = target_obj.analyze_features(text, payload)
@@ -312,35 +361,48 @@ class Campaign:
                     f"{r.outcome.value} rc={r.returncode} sig={r.signal_name}"
                 )
 
+        # Signal handlers only work in the main thread of the main interpreter.
+        is_main_thread = (
+            hasattr(threading, "current_thread")
+            and hasattr(threading, "main_thread")
+            and threading.current_thread() is threading.main_thread()
+        )
+
         # Set up watchdog timer
         old_handler = None
         armed = False
-        if hasattr(signal, "setitimer"):
-            old_handler = signal.getsignal(signal.SIGALRM)
+        orig_sigint = None
 
-            def _deadline(_signum, _frame):
-                raise CampaignWallClockExceeded()
+        if is_main_thread:
+            if hasattr(signal, "setitimer") and hasattr(signal, "SIGALRM"):
+                try:
+                    old_handler = signal.getsignal(signal.SIGALRM)
 
-            signal.signal(signal.SIGALRM, _deadline)
-            signal.setitimer(signal.ITIMER_REAL, self.wall_clock_cap_s)
-            armed = True
+                    def _deadline(_signum, _frame):
+                        raise CampaignWallClockExceeded()
 
-        # Signal handler for graceful termination
-        orig_sigint = signal.getsignal(signal.SIGINT)
+                    signal.signal(signal.SIGALRM, _deadline)
+                    signal.setitimer(signal.ITIMER_REAL, self.wall_clock_cap_s)
+                    armed = True
+                except (ValueError, AttributeError, OSError):
+                    pass
 
-        def _handle_sigint(signum, frame):
-            nonlocal interrupted
-            interrupted = True
-            _save_checkpoint(is_interrupted=True)
-            if callable(orig_sigint) and orig_sigint != _handle_sigint:
-                orig_sigint(signum, frame)
-            else:
-                raise KeyboardInterrupt()
+            # Signal handler for graceful termination
+            try:
+                orig_sigint = signal.getsignal(signal.SIGINT)
 
-        try:
-            signal.signal(signal.SIGINT, _handle_sigint)
-        except (ValueError, AttributeError):
-            pass
+                def _handle_sigint(signum, frame):
+                    nonlocal interrupted
+                    interrupted = True
+                    _save_checkpoint(is_interrupted=True)
+                    if callable(orig_sigint) and orig_sigint != _handle_sigint:
+                        orig_sigint(signum, frame)
+                    else:
+                        raise KeyboardInterrupt()
+
+                signal.signal(signal.SIGINT, _handle_sigint)
+            except (ValueError, AttributeError, OSError):
+                orig_sigint = None
 
         batch_history: dict[str, Any] | None = None
 
@@ -428,20 +490,28 @@ class Campaign:
         except KeyboardInterrupt:
             interrupted = True
         finally:
-            if armed:
-                signal.setitimer(signal.ITIMER_REAL, 0)
-                signal.signal(signal.SIGALRM, old_handler)
-            try:
-                signal.signal(signal.SIGINT, orig_sigint)
-            except (ValueError, AttributeError):
-                pass
+            if armed and is_main_thread:
+                try:
+                    signal.setitimer(signal.ITIMER_REAL, 0)
+                    signal.signal(signal.SIGALRM, old_handler)
+                except (ValueError, AttributeError, OSError):
+                    pass
+            if orig_sigint is not None and is_main_thread:
+                try:
+                    signal.signal(signal.SIGINT, orig_sigint)
+                except (ValueError, AttributeError, OSError):
+                    pass
             results_fh.close()
             bar.close()
+            manifest = writer.close()
 
         elapsed = time.monotonic() - started
 
-        # Final corpus management and distillation
-        manifest = corpus.write_corpus(self.out_dir / corpus.CORPUS_NAME, payloads)
+        # Final corpus management and distillation. The raw corpus has already
+        # been streamed to disk; the manager is the deduplicated view used for
+        # distillation and coverage statistics.
+        if self.max_corpus_entries is not None:
+            corpus_mgr.trim(self.max_corpus_entries)
         distilled = corpus_mgr.distill()
         distilled_manifest = distilled.export_corpus(
             self.out_dir / corpus.DISTILLED_CORPUS_NAME
@@ -487,6 +557,16 @@ class Campaign:
         summary["slow_threshold_s"] = self.slow_threshold_s
         summary["timeout_threshold_s"] = self.timeout_s
         summary["reproducers"] = reproducers_manifest
+        summary["strategy_load"] = {
+            "name": loaded.name,
+            "from_cache": loaded.from_cache,
+            "compile_ms": loaded.compile_ms,
+            **loader.stats(),
+        }
+        if self.max_corpus_entries is not None:
+            summary["corpus_memory"] = corpus_mgr.memory_stats()
+        if cache is not None:
+            summary["result_cache"] = cache.stats()
 
         if batch_history:
             summary["batch_history"] = batch_history
@@ -497,6 +577,34 @@ class Campaign:
             json.dumps(summary, indent=2), encoding="utf-8"
         )
         return summary
+
+    def _run_payload(
+        self,
+        payload: bytes,
+        target_obj: Any,
+        cache: ResultCache | None,
+        cache_context: dict[str, Any] | None,
+    ) -> Any:
+        """Run one payload, consulting the deterministic cache when enabled.
+
+        A cache failure is contained inside :class:`ResultCache`; this helper
+        always returns a real or cached :class:`RunResult`.
+        """
+        key = None
+        if cache is not None and cache_context is not None:
+            key = cache.key(cache_context, payload)
+            hit = cache.get(key)
+            if hit is not None:
+                return hit
+        result = target_obj.run(
+            payload,
+            timeout_s=self.timeout_s,
+            extra_args=self.extra_args,
+            slow_threshold_s=self.slow_threshold_s,
+        )
+        if cache is not None and key is not None:
+            cache.put(key, result)
+        return result
 
     def _summarize(
         self,
@@ -512,38 +620,57 @@ class Campaign:
             target_obj = get_target(self.target)
         n = len(results)
         counts: dict[str, int] = {}
+        buckets: dict[str, dict] = {}
+        lengths: list[int] = []
+        durs: list[float] = []
+        diag_counts: dict[str, int] = {}
+        unique_crash_shas: set[str] = set()
+        shaped = 0
+        xml_shaped = 0
+
+        # One pass over the result log. At corpus scale the old version built a
+        # separate list of every diagnostic and then walked the results again
+        # for each aggregate; this keeps only the counters that are reported.
         for r in results:
-            counts[r["outcome"]] = counts.get(r["outcome"], 0) + 1
+            outcome = r["outcome"]
+            counts[outcome] = counts.get(outcome, 0) + 1
+
+            bucket = r.get("structure", {}).get("bucket", "unknown")
+            entry = buckets.setdefault(bucket, {"n": 0, "accepted": 0})
+            entry["n"] += 1
+            if outcome in ("parsed_clean", "parsed_diag"):
+                entry["accepted"] += 1
+
+            lengths.append(r["len"])
+            durs.append(r["dur_ms"])
+            for diagnostic in r.get("diagnostics", []):
+                norm = target_obj.normalize_diagnostic(diagnostic)
+                diag_counts[norm] = diag_counts.get(norm, 0) + 1
+            if outcome in ("crash", "timeout"):
+                unique_crash_shas.add(r["sha"])
+            if r.get("valid_shape", r.get("starts_lt")):
+                shaped += 1
+            if r.get("starts_lt"):
+                xml_shaped += 1
 
         accepted = counts.get("parsed_clean", 0) + counts.get("parsed_diag", 0)
-
-        buckets: dict[str, dict] = {}
-        for r in results:
-            b = r.get("structure", {}).get("bucket", "unknown")
-            e = buckets.setdefault(b, {"n": 0, "accepted": 0})
-            e["n"] += 1
-            if r["outcome"] in ("parsed_clean", "parsed_diag"):
-                e["accepted"] += 1
-        for b, e in buckets.items():
-            e["share"] = round(e["n"] / n, 3) if n else 0.0
-            e["acceptance_rate"] = round(e["accepted"] / e["n"], 3) if e["n"] else 0.0
+        for entry in buckets.values():
+            entry["share"] = round(entry["n"] / n, 3) if n else 0.0
+            entry["acceptance_rate"] = (
+                round(entry["accepted"] / entry["n"], 3) if entry["n"] else 0.0)
         crashes = counts.get("crash", 0) + counts.get("timeout", 0)
 
-        all_diags = [d for r in results for d in r.get("diagnostics", [])]
-        lengths = [r["len"] for r in results] or [0]
-        durs = [r["dur_ms"] for r in results] or [0.0]
-
-        diag_counts: dict[str, int] = {}
-        for d in all_diags:
-            norm = target_obj.normalize_diagnostic(d)
-            diag_counts[norm] = diag_counts.get(norm, 0) + 1
+        lengths = lengths or [0]
+        durs = durs or [0.0]
         diag_hist = dict(sorted(diag_counts.items(), key=lambda kv: (-kv[1], kv[0])))
 
-        # Find top slowest inputs
-        sorted_by_dur = sorted(results, key=lambda r: r.get("dur_ms", 0.0), reverse=True)
+        # heapq.nlargest avoids sorting the entire result list just to report
+        # the ten slowest inputs.
+        sorted_by_dur = heapq.nlargest(
+            10, results, key=lambda r: r.get("dur_ms", 0.0))
         slowest = [
             {"sha": r.get("sha", ""), "dur_ms": r.get("dur_ms", 0.0), "outcome": r.get("outcome", "")}
-            for r in sorted_by_dur[:10]
+            for r in sorted_by_dur
         ]
 
         return {
@@ -558,15 +685,9 @@ class Campaign:
             "acceptance_rate": round(accepted / n, 4) if n else 0.0,
             "buckets": buckets,
             "crash_count": crashes,
-            "unique_crash_inputs": len(
-                {r["sha"] for r in results if r["outcome"] in ("crash", "timeout")}
-            ),
-            "shape_rate": round(
-                sum(1 for r in results if r.get("valid_shape", r.get("starts_lt"))) / n, 4
-            ) if n else 0.0,
-            "xml_shaped_rate": round(
-                sum(1 for r in results if r.get("starts_lt")) / n, 4
-            ) if n else 0.0,
+            "unique_crash_inputs": len(unique_crash_shas),
+            "shape_rate": round(shaped / n, 4) if n else 0.0,
+            "xml_shaped_rate": round(xml_shaped / n, 4) if n else 0.0,
             "diagnostic_templates": diag_hist,
             "distinct_diagnostic_templates": len(diag_hist),
             "input_len": {
@@ -615,6 +736,17 @@ def main() -> None:
                     help="Resume from existing checkpoint in output directory")
     ap.add_argument("--progress", choices=("auto", "on", "off"), default="auto",
                     help="Progress bar: auto (TTY only), on, or off")
+    ap.add_argument("--cache-results", action="store_true",
+                    help="Reuse harness results for identical inputs; only for "
+                         "deterministic targets (also STRATAGEM_RESULT_CACHE=1)")
+    ap.add_argument("--cache-dir", default=None,
+                    help="Directory for the result cache database")
+    ap.add_argument("--cache-size", type=int, default=200_000,
+                    help="Maximum cached results (0 = unlimited, default: 200000)")
+    ap.add_argument("--cache-ttl", type=float, default=None,
+                    help="Discard cached results older than this many seconds")
+    ap.add_argument("--max-corpus-entries", type=int, default=None,
+                    help="Trim the in-memory corpus to this many entries")
     ap.add_argument("--parallel", action="store_true",
                     help="Run across targets in parallel")
     ap.add_argument("--targets", nargs="+", default=None,
@@ -636,6 +768,11 @@ def main() -> None:
             max_workers=args.workers,
             mode=args.mode,
             adaptive_batch=args.adaptive_batch,
+            use_result_cache=args.cache_results,
+            result_cache_dir=args.cache_dir,
+            result_cache_size=(args.cache_size or None),
+            result_cache_ttl_s=args.cache_ttl,
+            max_corpus_entries=args.max_corpus_entries,
         )
         print("\n=== Parallel Run Complete ===")
         print(f"Completed: {summary.completed_campaigns}/{summary.total_campaigns} in {summary.total_wall_clock_s:.2f}s")
@@ -659,6 +796,11 @@ def main() -> None:
         checkpoint_interval=args.checkpoint_interval,
         resume=args.resume,
         progress=args.progress,
+        use_result_cache=args.cache_results,
+        result_cache_dir=args.cache_dir,
+        result_cache_size=(args.cache_size or None),
+        result_cache_ttl_s=args.cache_ttl,
+        max_corpus_entries=args.max_corpus_entries,
     )
     s = c.run()
 

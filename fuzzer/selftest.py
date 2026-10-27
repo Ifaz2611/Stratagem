@@ -604,8 +604,17 @@ def main() -> int:
     test_improvements.test_timeout_and_slow_inputs()
     test_improvements.test_incremental_persistence()
 
-    total_passed = _passed + test_targets._passed + test_improvements._passed
-    all_failed = _failed + test_targets._failed + test_improvements._failed
+    from fuzzer import test_performance
+    test_performance.test_strategy_loader()
+    test_performance.test_result_cache()
+    test_performance.test_corpus_memory()
+    test_performance.test_campaign_cache_integration()
+    test_performance.test_distributed()
+
+    total_passed = (_passed + test_targets._passed
+                    + test_improvements._passed + test_performance._passed)
+    all_failed = (_failed + test_targets._failed
+                  + test_improvements._failed + test_performance._failed)
     print(f"passed={total_passed} failed={len(all_failed)}")
     for f in all_failed:
         print(f"  FAIL {f}")

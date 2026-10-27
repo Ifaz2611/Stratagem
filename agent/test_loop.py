@@ -517,6 +517,22 @@ def test_run_end_to_end_writes_artifacts() -> None:
                "loop must pass its progress mode to campaigns")
 
 
+def test_run_forwards_performance_settings() -> None:
+    with loop_env():
+        FakeCampaign.reset()
+        lp = make_loop(max_iterations=1, max_examples=10)
+        lp.use_result_cache = True
+        lp.max_corpus_entries = 50
+        attach(lp, FakeBackend([VALID_CODE]))
+        with patch.object(loopmod, "Campaign", FakeCampaign), \
+                patch.object(loopmod.validate, "validate", return_value=good()):
+            lp.run()
+        expect(len(FakeCampaign.instances) == 1, "expected 1 campaign")
+        call = FakeCampaign.instances[0]
+        expect(call.kwargs.get("use_result_cache") is True, "use_result_cache forwarded")
+        expect(call.kwargs.get("max_corpus_entries") == 50, "max_corpus_entries forwarded")
+
+
 def test_run_stops_on_exhausted_budget_without_calling_llm() -> None:
     with loop_env():
         FakeCampaign.reset()
