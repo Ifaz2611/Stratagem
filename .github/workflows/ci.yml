@@ -74,11 +74,11 @@ jobs:
       - name: Replay the recorded transcript
         run: python scripts/ci.py --replay --run-id loop --iterations 5 --examples 10 --keep
 
-      - name: Upload replay artifacts on failure
-        if: failure()
+      - name: Upload replay artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: replay-failure-${{ github.run_id }}
+          name: replay-artifacts
           path: runs/ci-replay-loop
           if-no-files-found: ignore
           retention-days: 7
@@ -90,9 +90,15 @@ jobs:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: unit
+    needs: [unit, replay]
     steps:
       - uses: actions/checkout@v4
+
+      - name: Download replay transcript
+        uses: actions/download-artifact@v4
+        with:
+          name: replay-artifacts
+          path: runs/ci-replay-loop
 
       - uses: docker/setup-buildx-action@v3
 
@@ -110,7 +116,7 @@ jobs:
         run: |
           docker run --rm stratagem:ci bash -lc '
             mkdir -p runs/docker-smoke &&
-            cp -r runs/loop/transcript runs/docker-smoke/transcript &&
+            cp -r runs/ci-replay-loop/transcript runs/docker-smoke/transcript &&
             python -m agent.loop --backend replay --run-id docker-smoke \
               -n 5 -i 1 --progress off --status off &&
             python -m agent.debug --run-id docker-smoke --diagnose
