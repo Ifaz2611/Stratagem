@@ -231,14 +231,24 @@ class DistributedPlan:
             else:
                 claim = self.claim_path(task)
                 if claim.exists():
-                    meta = _read_json(claim) or {}
-                    claimed_at = float(meta.get("claimed_at", 0.0) or 0.0)
+                    meta = _read_json(claim)
+                    if meta and "claimed_at" in meta:
+                        try:
+                            claimed_at = float(meta["claimed_at"])
+                        except (ValueError, TypeError):
+                            claimed_at = 0.0
+                    else:
+                        try:
+                            claimed_at = claim.stat().st_mtime
+                        except OSError:
+                            claimed_at = now
                     stale = (lease_s is not None
+                             and claimed_at > 0.0
                              and now - claimed_at > float(lease_s))
                     claimed.append({
                         "task_id": task.task_id,
-                        "worker_id": meta.get("worker_id"),
-                        "pid": meta.get("pid"),
+                        "worker_id": meta.get("worker_id") if meta else None,
+                        "pid": meta.get("pid") if meta else None,
                         "claimed_at": claimed_at,
                         "stale": stale,
                     })
@@ -356,9 +366,21 @@ def _claim_next(
             continue
         claim = plan.claim_path(task)
         if claim.exists():
-            meta = _read_json(claim) or {}
-            claimed_at = float(meta.get("claimed_at", 0.0) or 0.0)
-            if lease_s is None or now - claimed_at <= float(lease_s):
+            meta = _read_json(claim)
+            if meta and "claimed_at" in meta:
+                try:
+                    claimed_at = float(meta["claimed_at"])
+                except (ValueError, TypeError):
+                    claimed_at = 0.0
+            else:
+                # If the file exists but JSON is not readable yet, it was
+                # likely created milliseconds ago by a concurrent worker.
+                # Fall back to file modification time.
+                try:
+                    claimed_at = claim.stat().st_mtime
+                except OSError:
+                    continue
+            if claimed_at <= 0.0 or lease_s is None or now - claimed_at <= float(lease_s):
                 continue
             try:
                 claim.unlink()
@@ -367,16 +389,30 @@ def _claim_next(
         claim.parent.mkdir(parents=True, exist_ok=True)
         try:
             fd = os.open(str(claim), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
-        except FileExistsError:
+        except (FileExistsError, OSError):
             continue
+        payload = json.dumps({
+            "worker_id": worker_id,
+            "pid": os.getpid(),
+            "claimed_at": now,
+        }).encode("utf-8")
+        try:
+            os.write(fd, payload)
         except OSError:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            try:
+                claim.unlink()
+            except OSError:
+                pass
             continue
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump({
-                "worker_id": worker_id,
-                "pid": os.getpid(),
-                "claimed_at": now,
-            }, fh)
+        else:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
         # The shard may have completed between the existence checks and the
         # claim. Do not run it twice.
         if plan.done_path(task).exists() or plan.failed_path(task).exists():
@@ -501,6 +537,7 @@ def run_local(
     work_dir: Path | str,
     *,
     workers: int = 2,
+    poll_s: float = 0.05,
     lease_s: float = 6 * 3600.0,
     idle_timeout_s: float = 30.0,
     campaign_factory: Callable[[ShardTask, Path], Any] | None = None,
@@ -516,6 +553,7 @@ def run_local(
                 work_dir,
                 f"local-{i}",
                 once=False,
+                poll_s=poll_s,
                 lease_s=lease_s,
                 idle_timeout_s=idle_timeout_s,
                 campaign_factory=campaign_factory,
@@ -713,6 +751,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     stats = run_local(
         args.workdir,
         workers=args.workers,
+        poll_s=getattr(args, "poll", 0.05),
         lease_s=args.lease,
         idle_timeout_s=args.idle_timeout,
     )
@@ -762,6 +801,7 @@ def main(argv: list[str] | None = None) -> int:
     p_run = sub.add_parser("run", help="Run local workers until the plan is done")
     p_run.add_argument("--workdir", required=True)
     p_run.add_argument("--workers", type=int, default=2)
+    p_run.add_argument("--poll", type=float, default=0.05)
     p_run.add_argument("--lease", type=float, default=6 * 3600.0)
     p_run.add_argument("--idle-timeout", type=float, default=30.0)
     p_run.set_defaults(func=_cmd_run)
