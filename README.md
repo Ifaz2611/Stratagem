@@ -404,6 +404,10 @@ The ANTLR grammars are adapted for specific parser behaviors. See `grammar/ADAPT
 ## Documentation
 
 - [getstart.md](getstart.md) - Installation and usage guide
+- [docs/architecture.md](docs/architecture.md) - System architecture and component diagrams
+- [docs/api-reference.md](docs/api-reference.md) - API documentation for key modules
+- [docs/tutorial-adding-targets.md](docs/tutorial-adding-targets.md) - Tutorial for adding new targets
+- [docs/case-studies.md](docs/case-studies.md) - Case studies from past findings
 - [docs/design-decisions.md](docs/design-decisions.md) - Engineering rationale
 - [docs/findings.md](docs/findings.md) - Test results and bug reports
 - [docs/REPORT.md](docs/REPORT.md) - Project report

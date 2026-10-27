@@ -286,6 +286,18 @@ See [docs/developer-experience.md](docs/developer-experience.md) for details.
 - Include code blocks with syntax highlighting
 - Use relative links for internal references
 
+### Adding New Targets
+
+One of the most valuable contributions is adding support for new parsers or protocols. See [docs/tutorial-adding-targets.md](docs/tutorial-adding-targets.md) for a complete step-by-step guide.
+
+Key steps:
+1. Implement a new target class in `fuzzer/targets/`
+2. Add feature analysis in `fuzzer/targets/*_features.py`
+3. Register the target in `fuzzer/targets/__init__.py`
+4. Provide or build a harness (C/C++ or reference runner)
+5. Add grammar to `grammar/` directory
+6. Test with baseline and agentic campaigns
+
 ## Reporting Issues
 
 ### Bug Reports

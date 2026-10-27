@@ -53,11 +53,11 @@ This document outlines potential improvements and new features for Stratagem, th
 - [x] Add integration with CI/CD pipelines
 
 ### Documentation
-- [ ] Add tutorial for adding new targets
-- [ ] Create architecture diagrams
-- [ ] Add contribution guidelines
-- [ ] Write API documentation for key modules
-- [ ] Add case studies from past findings
+- [x] Add tutorial for adding new targets
+- [x] Create architecture diagrams
+- [x] Add contribution guidelines
+- [x] Write API documentation for key modules
+- [x] Add case studies from past findings
 
 ### Performance
 - [ ] Implement strategy compilation to bytecode
