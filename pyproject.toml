@@ -1,0 +1,23 @@
+[tool.pytest.ini_options]
+# The agent suite is hermetic: it uses test doubles and temporary directories,
+# so it runs on every push without fetching a target or building a harness.
+# The fuzzer's integration suites are intentionally separate; run them through
+# scripts/ci.py --replay or their module entry points after building.
+testpaths = ["agent"]
+python_files = ["test_*.py"]
+addopts = "-ra --strict-markers"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["agent"]
+branch = true
+omit = [
+    "agent/test_*.py",
+]
+
+[tool.coverage.report]
+exclude_also = [
+    "if __name__ == .__main__.:",
+]

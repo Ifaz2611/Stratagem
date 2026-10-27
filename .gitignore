@@ -31,6 +31,9 @@ build/
 *.gcno
 *.gcov
 coverage/
+.coverage
+.coverage.*
+htmlcov/
 
 # Regenerable verification output: scripts/verify_replay.sh writes a full copy
 # of a run here to compare against the committed one. Reproducible on demand,

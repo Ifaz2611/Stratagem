@@ -21,6 +21,7 @@ import argparse
 import json
 import os
 import re
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -28,7 +29,10 @@ from pathlib import Path
 from agent import env as envmod
 from agent import llm, validate
 from agent.ensemble import Candidate, vote_candidates
+from agent.errors import (DebugLog, explain_exception, format_exception,
+                          validation_hint)
 from agent.fewshot import FewShotLibrary
+from agent.progress import RunStatus, normalize_mode
 from agent.strategy_cache import StrategyCache
 from agent.tuning import HyperparameterTuner, TuningDecision
 from fuzzer.campaign import Campaign, MAX_EXAMPLES_PER_ITERATION
@@ -176,6 +180,16 @@ class Loop:
     fallbacks: str | None = None
     circuit_breaker: bool = False
 
+    # ---- developer experience
+    # auto renders only on a TTY; on also emits plain milestone lines in CI;
+    # off is silent. Status lines are separate so they can be kept while the
+    # bar is suppressed.
+    progress_mode: str = "auto"
+    status_mode: str = "auto"
+    # Write structured JSONL events to runs/<id>/debug.jsonl. Off by default to
+    # keep the recorded artifact set unchanged, on when diagnosing.
+    debug: bool = False
+
     budget: Budget = field(init=False)
     out: Path = field(init=False)
 
@@ -201,10 +215,19 @@ class Loop:
                 f"screening_examples must be 1..{MAX_EXAMPLES_PER_ITERATION}")
         if not 0.0 <= self.cache_similarity <= 1.0:
             raise ValueError("cache_similarity must be 0..1")
+        self.progress_mode = normalize_mode(self.progress_mode)
+        self.status_mode = normalize_mode(self.status_mode)
         self.budget = Budget(self.max_iterations, self.max_usd)
         self.out = REPO_ROOT / "runs" / self.run_id
         self.transcript = self.out / "transcript"
         self.transcript.mkdir(parents=True, exist_ok=True)
+        # Created before any fallible setup so a resume/configuration failure
+        # also leaves a debug trail.
+        self.debug_log: DebugLog | None = (
+            DebugLog(self.out / "debug.jsonl") if self.debug else None)
+        self._status = RunStatus(self.run_id, self.max_iterations,
+                                 mode=self.progress_mode,
+                                 status_mode=self.status_mode)
         from agent.prompt_manager import PromptManager, PromptABTester, PromptVersion
         self.prompt_manager = PromptManager(PROMPTS_ROOT)
         try:
@@ -543,6 +566,11 @@ class Loop:
         import re as _re
         return _re.findall(r"^## \d+\. (.+)$", f.read_text(encoding="utf-8"), _re.M)
 
+    def _debug(self, event: str, **fields) -> None:
+        """Record a structured event when --debug is enabled."""
+        if self.debug_log is not None:
+            self.debug_log.event(event, run_id=self.run_id, **fields)
+
     def _call(self, user: str, tag: str, backend=None,
               iteration: int | None = None) -> llm.LLMResponse:
         self._call_seq += 1
@@ -558,10 +586,18 @@ class Loop:
 
         t0 = time.monotonic()
         be = backend or self.backend
-        if getattr(self, "stream", False) and hasattr(be, "complete_stream"):
-            r = be.complete_stream(self.system, user)
-        else:
-            r = be.complete(self.system, user)
+        self._status.phase(f"llm:{tag}")
+        try:
+            if getattr(self, "stream", False) and hasattr(be, "complete_stream"):
+                r = be.complete_stream(self.system, user)
+            else:
+                r = be.complete(self.system, user)
+        except BaseException as exc:
+            self._debug("llm_call_failed", call=n, tag=tag, iteration=iteration,
+                        error=f"{type(exc).__name__}: {exc}",
+                        prompt_chars=len(user))
+            self._status.note(f"LLM call {n} failed: {type(exc).__name__}")
+            raise
         elapsed = time.monotonic() - t0
         if getattr(r, "fallback_used", False):
             print(f"    [llm:fallback] failover used: from {r.fallback_from} to {r.backend} ({r.model})")
@@ -576,6 +612,11 @@ class Loop:
         cost = f"${r.cost_usd:.4f}" if r.cost_usd is not None else "n/a"
         print(f"    [llm] call {n} ({tag}) {elapsed:.1f}s  "
               f"in={r.billable_input} out={r.output_tokens} cost={cost}")
+        self._status.llm_call(n, tag, elapsed, r.cost_usd)
+        self._debug("llm_call", call=n, tag=tag, iteration=iteration,
+                    elapsed_s=round(elapsed, 2), input_tokens=r.billable_input,
+                    output_tokens=r.output_tokens, cost_usd=r.cost_usd,
+                    model=r.model, backend=r.backend)
         return r
 
     # ---------------------------------------------------------------- prompts
@@ -699,6 +740,13 @@ class Loop:
                 print(f"    [budget] ${self.budget.cost_usd:.2f} spent, mean call "
                       f"${self.budget.mean_call_cost:.2f}; not enough left under "
                       f"${self.budget.max_usd:.2f} for another call")
+                print("      hint: raise --max-usd, or resume the completed "
+                      "iterations with --resume-from N")
+                self._status.note("budget stopped a strategy call")
+                self._debug("budget_stop", iteration=it, tag=tag,
+                            phase="obtain", spent=self.budget.cost_usd,
+                            max_usd=self.budget.max_usd,
+                            mean_call_cost=self.budget.mean_call_cost)
                 self._last_gate_failures += failures
                 return None
             call_tag = tag if attempt == 0 else f"{tag}-repair{attempt}"
@@ -707,6 +755,9 @@ class Loop:
             if v.ok:
                 acc = f"{v.acceptance:.1%}" if v.acceptance is not None else "?"
                 print(f"    [gate] {name} passed (smoke acceptance {acc})")
+                self._debug("gate_passed", iteration=it, tag=call_tag,
+                            stage=v.stage, acceptance=v.acceptance,
+                            repairs=failures, call_n=self._call_seq)
                 self._last_gate_failures += failures
                 return name, v.code
             # A truncated block is a transport failure, not a modelling error:
@@ -716,16 +767,29 @@ class Loop:
                 resends += 1
                 print(f"    [gate] response truncated in transport "
                       f"-> resend {resends}/{MAX_RESENDS}")
+                self._debug("gate_truncated", iteration=it, tag=call_tag,
+                            resend=resends, max_resends=MAX_RESENDS,
+                            call_n=self._call_seq)
                 if self.budget.would_overrun():
                     print(f"    [budget] no room under ${self.budget.max_usd:.2f} "
                           f"for another resend")
+                    self._debug("budget_stop", iteration=it, tag=call_tag,
+                                phase="resend", spent=self.budget.cost_usd,
+                                max_usd=self.budget.max_usd)
                     self._last_gate_failures += failures
                     return None
                 continue
             failures += 1
             print(f"    [gate] {name} FAILED at '{v.stage}' -> repair "
                   f"{attempt + 1}/{max_repairs}")
+            print(f"      {validation_hint(v.stage, run_id=self.run_id)}")
+            self._debug("gate_failed", iteration=it, tag=call_tag,
+                        stage=v.stage, attempt=attempt + 1,
+                        max_repairs=max_repairs, error=v.error,
+                        call_n=self._call_seq)
             if attempt == max_repairs or self.budget.would_overrun():
+                self._debug("gate_exhausted", iteration=it, tag=call_tag,
+                            stage=v.stage, failures=failures)
                 self._last_gate_failures += failures
                 return None
             user = (prompt + "\n\n---\n\n# Your previous attempt was rejected\n\n"
@@ -767,10 +831,14 @@ class Loop:
             try:
                 summary = Campaign(name, screen_examples, screen_dir,
                                    mode="survey", target=self.target,
-                                   random_seed=1000 + it).run()
+                                   random_seed=1000 + it,
+                                   progress=self.progress_mode).run()
             except Exception as exc:
                 err = f"{type(exc).__name__}: {exc}"
                 print(f"    [ensemble] candidate {idx} screening failed: {err[:160]}")
+                print(f"      hint: {explain_exception(exc)}")
+                self._debug("ensemble_screen_failed", iteration=it,
+                            candidate=idx, error=err)
                 candidates.append(Candidate(name=name, model=str(model),
                                             source=source, error=err))
                 continue
@@ -781,6 +849,10 @@ class Loop:
                   f"prod={summary['structure']['productions_hit']} "
                   f"diag={summary['distinct_diagnostic_templates']} "
                   f"crashes={summary['crash_count']}")
+            self._debug("ensemble_screened", iteration=it, candidate=idx,
+                        acceptance=summary["acceptance_rate"],
+                        productions=summary["structure"]["productions_hit"],
+                        crashes=summary["crash_count"])
 
         result = vote_candidates(candidates)
         report = result.to_json()
@@ -824,11 +896,20 @@ class Loop:
             if not v.ok:
                 print(f"    [cache] match from {match.entry.target.name} "
                       f"(sim={match.similarity:.2f}) rejected at '{v.stage}'")
+                print(f"      {validation_hint(v.stage, run_id=self.run_id)}")
+                self._debug("cache_rejected", iteration=it,
+                            source_run=match.entry.run_id,
+                            similarity=match.similarity, stage=v.stage)
                 continue
             acc = f"{v.acceptance:.1%}" if v.acceptance is not None else "?"
             print(f"    [cache] reusing strategy from {match.entry.target.name} "
                   f"(sim={match.similarity:.2f}, score={match.score:.2f}, "
                   f"smoke acceptance {acc})")
+            self._debug("cache_reused", iteration=it,
+                        source_run=match.entry.run_id,
+                        target=match.entry.target.name,
+                        similarity=match.similarity,
+                        acceptance=v.acceptance)
             meta = match.to_json()
             meta["smoke_acceptance"] = v.acceptance
             idir = self.out / "iterations" / f"iter-{it}"
@@ -888,6 +969,12 @@ class Loop:
                 print(f"    [budget] ${self.budget.cost_usd:.2f} spent, mean call "
                       f"${self.budget.mean_call_cost:.2f}; not enough left under "
                       f"${self.budget.max_usd:.2f} for a campaign repair")
+                print("      hint: raise --max-usd, then resume with "
+                      "--resume-from N to keep completed iterations")
+                self._debug("budget_stop", iteration=it, tag=tag,
+                            phase="campaign_repair",
+                            spent=self.budget.cost_usd,
+                            max_usd=self.budget.max_usd)
                 return None
             user = (prompt + "\n\n---\n\n# Your previous attempt was rejected\n\n"
                     "The module passed validation but failed part-way through the "
@@ -904,19 +991,47 @@ class Loop:
             if not v.ok:
                 print(f"    [gate] FAILED at '{v.stage}' -> campaign repair "
                       f"{attempt}/{repairs}")
+                print(f"      {validation_hint(v.stage, run_id=self.run_id)}")
+                self._debug("campaign_repair_gate_failed", iteration=it,
+                            attempt=attempt, stage=v.stage, error=v.error)
                 err = v.error or v.stage
                 continue
             try:
-                summary = Campaign(name, run_examples, idir, mode="survey", target=self.target).run()
+                summary = Campaign(name, run_examples, idir, mode="survey",
+                                   target=self.target,
+                                   progress=self.progress_mode).run()
             except Exception as again:
                 err = f"{type(again).__name__}: {again}"
                 print(f"    [run] campaign failed again: {err[:120]}")
+                print(f"      hint: {explain_exception(again)}")
+                self._debug("campaign_repair_failed", iteration=it,
+                            attempt=attempt, error=err)
                 continue
             print(f"    [run] campaign repaired on attempt {attempt}")
+            self._debug("campaign_repaired", iteration=it, attempt=attempt,
+                        acceptance=summary["acceptance_rate"])
             return name, v.code, summary
         return None
 
     def run(self) -> dict:
+        """Run the loop, closing progress and debug resources on every path."""
+        try:
+            return self._run()
+        except BaseException as exc:
+            self._debug("run_failed", error=f"{type(exc).__name__}: {exc}")
+            raise
+        finally:
+            self._status.finish()
+            if self.debug_log is not None:
+                self.debug_log.close()
+
+    def _run(self) -> dict:
+        self._status.start()
+        self._debug("run_started", backend=self.backend_kind,
+                    target=self.target, max_iterations=self.max_iterations,
+                    max_examples=self.max_examples, max_usd=self.max_usd,
+                    prompt_set=self.prompt_set,
+                    resume_from=self.resume_from)
         stopped_early: str | None = None
         iterations: list[dict] = self._prior_iterations()
         prev_source = ""
@@ -929,7 +1044,16 @@ class Loop:
             print(f"\n=== iteration {it} ===")
             if self.budget.exhausted:
                 print(f"    budget exhausted (${self.budget.cost_usd:.2f}); stopping")
+                print("      hint: resume the completed iterations later with "
+                      f"--resume-from {it}")
+                self._debug("budget_exhausted", iteration=it,
+                            spent=self.budget.cost_usd,
+                            max_usd=self.budget.max_usd)
+                stopped_early = "budget exhausted"
                 break
+            self._status.iteration_started(it)
+            self._debug("iteration_started", iteration=it,
+                        resume=bool(self.resume_from))
 
             # Per-iteration provenance. These are read when the iteration row
             # is written, so a cache hit or ensemble must not bleed into the
@@ -982,6 +1106,10 @@ class Loop:
                     # writing the summary and iteration log for the work
                     # completed so far.
                     print(f"    [llm] FAILED: {exc}")
+                    print(f"      hint: {explain_exception(exc)}")
+                    self._debug("llm_failed", iteration=it,
+                                error=f"{type(exc).__name__}: {exc}",
+                                spent=self.budget.cost_usd)
                     if getattr(exc, "usage_limit", False):
                         print(f"    the backend refused on an account limit, not "
                               f"a budget one: ${self.budget.cost_usd:.2f} of "
@@ -993,6 +1121,11 @@ class Loop:
                     break
             if got is None:
                 print("    [gate] could not obtain a usable strategy; stopping")
+                print("      hint: inspect the gate failures with "
+                      f"`python -m agent.debug --run-id {self.run_id} "
+                      "--transcript`")
+                self._debug("no_strategy", iteration=it,
+                            gate_failures=self._last_gate_failures)
                 stopped_early = "validation gate could not produce a usable strategy"
                 break
             name, source = got
@@ -1001,10 +1134,14 @@ class Loop:
             (idir / "strategy.py").write_text(source, encoding="utf-8")
 
             print(f"    [run] {examples} examples ...")
+            self._status.phase("campaign")
+            self._debug("campaign_started", iteration=it, strategy=name,
+                        examples=examples, target=self.target)
             campaign_failed = False
             try:
                 summary = Campaign(name, examples, idir, mode="survey",
-                                   target=self.target).run()
+                                   target=self.target,
+                                   progress=self.progress_mode).run()
             except Exception as exc:
                 # The validation gate draws a few dozen documents, so a branch
                 # it never took can still fail at 500. A strategy that dies
@@ -1012,6 +1149,9 @@ class Loop:
                 # traceback rather than losing the iteration.
                 campaign_failed = True
                 print(f"    [run] campaign failed: {type(exc).__name__}: {exc}")
+                print(f"      hint: {explain_exception(exc)}")
+                self._debug("campaign_failed", iteration=it, strategy=name,
+                            error=f"{type(exc).__name__}: {exc}")
                 repaired = self._repair_campaign(
                     it, prompt, tag, name, exc, max_repairs=decision.repairs,
                     examples=examples)
@@ -1026,6 +1166,21 @@ class Loop:
                   f"depth<={st['max_depth_seen']} "
                   f"diag={summary['distinct_diagnostic_templates']} "
                   f"crashes={summary['crash_count']}")
+            self._status.iteration_finished(
+                it,
+                acceptance=summary["acceptance_rate"],
+                productions=f"{st['productions_hit']}/{st['productions_total']}",
+                crashes=summary["crash_count"],
+                cost_usd=self.budget.cost_usd,
+            )
+            self._debug("iteration_finished", iteration=it, strategy=name,
+                        examples=examples, acceptance=summary["acceptance_rate"],
+                        productions=st["productions_hit"],
+                        productions_total=st["productions_total"],
+                        max_depth=st["max_depth_seen"],
+                        crashes=summary["crash_count"],
+                        cost_usd=round(self.budget.cost_usd, 4),
+                        source=source_kind)
 
             # Persist this iteration's strategy for reuse by later runs. It is
             # only cached after it ran, so a cached entry always has measured
@@ -1066,6 +1221,9 @@ class Loop:
                 )
             prev_source, prev_summary, prev_results = source, summary, results
 
+        self._debug("run_finished", cost_usd=round(self.budget.cost_usd, 4),
+                    llm_calls=self.budget.calls,
+                    iterations=len(iterations), stopped_early=stopped_early)
         features = {
             "strategy_cache": self.cache.stats() if self.cache is not None else {"enabled": False},
             "few_shot": self.fewshot.stats() if self.fewshot is not None else {"enabled": False},
@@ -1091,6 +1249,8 @@ class Loop:
             "seed_model": self.seed_model,
             "refine_model": self.refine_model,
             "max_examples": self.max_examples,
+            "max_iterations": self.max_iterations,
+            "target": self.target,
             "iterations": iterations,
             "budget": self.budget.to_json(),
             "cost_cap_enforced": self.cost_cap_enforced,
@@ -1191,6 +1351,17 @@ def main() -> None:
                          help="comma-separated fallback backends (e.g. cli,replay)")
     grp_llm.add_argument("--circuit-breaker", action="store_true",
                          help="enable circuit breaker protection on backend calls")
+
+    grp_dx = ap.add_argument_group("developer experience")
+    grp_dx.add_argument("--progress", choices=("auto", "on", "off"),
+                        default="auto", dest="progress_mode",
+                        help="iteration progress bar (default: auto, TTY only)")
+    grp_dx.add_argument("--status", choices=("auto", "on", "off"),
+                        default="auto", dest="status_mode",
+                        help="real-time status lines (default: auto)")
+    grp_dx.add_argument("--debug", action="store_true",
+                        help="write structured events to runs/<id>/debug.jsonl "
+                             "and print tracebacks on failure")
     a = ap.parse_args()
 
     # .env is read here rather than at import time, so importing the module for
@@ -1210,37 +1381,54 @@ def main() -> None:
               f"--max-usd ${a.max_usd:.2f} is advisory; the iteration cap is the "
               "hard limit. Token counts are recorded exactly.")
 
-    loop = Loop(
-        backend_kind=backend,
-        run_id=a.run_id,
-        max_examples=a.max_examples,
-        max_iterations=a.iterations,
-        max_usd=a.max_usd,
-        model=model,
-        base_url=a.base_url,
-        resume_from=a.resume_from,
-        prompt_set=a.prompt_set,
-        seed_model=a.seed_model,
-        refine_model=a.refine_model,
-        target=a.target,
-        use_strategy_cache=a.use_strategy_cache,
-        cache_dir=a.cache_dir,
-        cache_similarity=a.cache_similarity,
-        few_shot=a.few_shot,
-        few_shot_k=a.few_shot_k,
-        few_shot_budget=a.few_shot_budget,
-        autotune=a.autotune,
-        tune_state=a.tune_state,
-        ensemble_models=a.ensemble_models,
-        ensemble_candidates=a.ensemble_candidates,
-        screening_examples=a.screening_examples,
-        use_generated_harness=a.use_generated_harness,
-        stream=a.stream,
-        prompt_ab=a.prompt_ab,
-        fallbacks=a.fallbacks,
-        circuit_breaker=a.circuit_breaker,
-    )
-    final = loop.run()
+    context = {"run_id": a.run_id, "backend": backend, "target": a.target,
+               "max_iterations": a.iterations}
+    try:
+        loop = Loop(
+            backend_kind=backend,
+            run_id=a.run_id,
+            max_examples=a.max_examples,
+            max_iterations=a.iterations,
+            max_usd=a.max_usd,
+            model=model,
+            base_url=a.base_url,
+            resume_from=a.resume_from,
+            prompt_set=a.prompt_set,
+            seed_model=a.seed_model,
+            refine_model=a.refine_model,
+            target=a.target,
+            use_strategy_cache=a.use_strategy_cache,
+            cache_dir=a.cache_dir,
+            cache_similarity=a.cache_similarity,
+            few_shot=a.few_shot,
+            few_shot_k=a.few_shot_k,
+            few_shot_budget=a.few_shot_budget,
+            autotune=a.autotune,
+            tune_state=a.tune_state,
+            ensemble_models=a.ensemble_models,
+            ensemble_candidates=a.ensemble_candidates,
+            screening_examples=a.screening_examples,
+            use_generated_harness=a.use_generated_harness,
+            stream=a.stream,
+            prompt_ab=a.prompt_ab,
+            fallbacks=a.fallbacks,
+            circuit_breaker=a.circuit_breaker,
+            progress_mode=a.progress_mode,
+            status_mode=a.status_mode,
+            debug=a.debug,
+        )
+        final = loop.run()
+    except KeyboardInterrupt:
+        print("\n[loop] interrupted; completed iterations are preserved. "
+              f"Resume with --run-id {a.run_id} --resume-from N.",
+              file=sys.stderr)
+        raise SystemExit(130)
+    except Exception as exc:
+        print(file=sys.stderr)
+        print(format_exception(exc, context=context, debug=a.debug),
+              file=sys.stderr)
+        raise SystemExit(1)
+
     print(f"\nwrote {loop.out}/ITERATION_LOG.md")
     print(json.dumps(final["budget"], indent=2))
 

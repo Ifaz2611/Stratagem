@@ -22,6 +22,7 @@ Stratagem explores a novel approach to grammar-based fuzzing by using LLMs as th
 - **Grammar-Based**: Uses ANTLR grammars adapted for target parsers
 - **Sanitizer Integration**: AddressSanitizer and UndefinedBehaviorSanitizer for crash detection
 - **Reproducible**: All LLM interactions are recorded for replay without credentials
+- **Developer Tooling**: Hermetic loop tests, actionable errors, a run debugger, progress bars and CI/CD workflows
 
 ### Project Structure
 
@@ -36,6 +37,11 @@ Stratagem explores a novel approach to grammar-based fuzzing by using LLMs as th
 │   ├── tuning.py    # Automatic loop hyperparameter tuning
 │   ├── fewshot.py   # Successful past strategies as prompt examples
 │   ├── harness_gen.py     # Target-specific harness generation
+│   ├── errors.py    # Actionable errors, debug log, run diagnosis
+│   ├── debug.py     # `python -m agent.debug` CLI
+│   ├── progress.py  # Progress bars and real-time status lines
+│   ├── test_loop.py # Hermetic agent-loop test suite
+│   ├── test_dx.py   # Error/debug/progress tests
 │   └── prompts/     # Prompt templates (v1-v5)
 ├── fuzzer/          # Fuzzing engine
 │   ├── campaign.py  # Run strategies through harness
@@ -58,6 +64,9 @@ Stratagem explores a novel approach to grammar-based fuzzing by using LLMs as th
 │   ├── findings.md
 │   └── REPORT.md
 ├── scripts/         # Utility scripts
+│   ├── ci.py        # Local CI runner mirroring GitHub Actions
+│   └── ...
+├── .github/workflows/ci.yml  # Unit, replay and container CI jobs
 ├── runs/            # Campaign outputs
 └── run.sh           # Docker entry point
 ```
@@ -274,6 +283,74 @@ python -m agent.loop --backend openai --prompt-ab v4,v5 --iterations 10
 
 See [agent/README.md](agent/README.md#agent-enhancements) for the mechanisms, safeguards, and output artifacts.
 
+## Developer Experience
+
+The loop, campaign runner and debugger share a small set of developer tools. They do not change the LLM call sequence, so replay transcripts stay valid.
+
+### Tests
+
+```bash
+pip install -r requirements-dev.txt
+
+# Hermetic agent suite: no harness, network or credentials
+python -m pytest agent -q
+
+# Without pytest
+python -m agent.test_loop
+python -m agent.test_dx
+
+# Measurement-layer self-checks
+python -m agent.selftest
+python -m fuzzer.selftest
+```
+
+### Debug a run
+
+```bash
+# Artifact-level diagnosis, with an actionable exit code
+python -m agent.debug --run-id loop --diagnose
+
+# List recorded calls and inspect one
+python -m agent.debug --run-id loop --transcript
+python -m agent.debug --run-id loop --call 3 --full
+
+# Inspect an iteration or machine-readable output
+python -m agent.debug --run-id loop --iteration 2
+python -m agent.debug --run-id loop --diagnose --json
+
+# Record structured events while the loop runs
+python -m agent.loop --backend replay --run-id demo --debug
+```
+
+Failures now print a hint, the run context and the command most likely to help. `--debug` also writes `runs/<id>/debug.jsonl`, an append-only event log that survives a killed process.
+
+### Progress
+
+```bash
+# Auto (default): bars on a TTY, silent in CI logs
+python -m agent.loop --backend openai --run-id demo
+
+# Force milestone lines in a log, or keep status without a bar
+python -m agent.loop --backend openai --run-id demo --progress on
+python -m agent.loop --backend openai --run-id demo --progress off --status on
+
+# Campaigns accept the same flag
+python -m fuzzer.campaign baseline --target mxml --progress on
+```
+
+Progress is written to stderr; stdout stays parseable. Set `STRATAGEM_NO_PROGRESS=1` to disable automatic rendering.
+
+### CI
+
+`.github/workflows/ci.yml` runs unit tests on Python 3.10-3.12, builds the harness and verifies replay identity, and builds/smoke-tests the container. Run the same checks locally:
+
+```bash
+python scripts/ci.py --unit --cov   # any OS
+python scripts/ci.py --full         # adds the harness replay check
+```
+
+See [docs/developer-experience.md](docs/developer-experience.md) for the full guide.
+
 ## Output
 
 Each campaign creates a directory under `runs/`:
@@ -330,6 +407,7 @@ The ANTLR grammars are adapted for specific parser behaviors. See `grammar/ADAPT
 - [docs/design-decisions.md](docs/design-decisions.md) - Engineering rationale
 - [docs/findings.md](docs/findings.md) - Test results and bug reports
 - [docs/REPORT.md](docs/REPORT.md) - Project report
+- [docs/developer-experience.md](docs/developer-experience.md) - Tests, debugging, progress and CI
 - [grammar/ADAPTATIONS.md](grammar/ADAPTATIONS.md) - Grammar vs parser differences
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Contributing guidelines
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) - Code of conduct

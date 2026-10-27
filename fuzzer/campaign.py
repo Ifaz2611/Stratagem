@@ -40,6 +40,7 @@ from fuzzer.runner import (
     Outcome,
     run_one,
 )
+from agent.progress import make_progress
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -106,6 +107,11 @@ class Campaign:
     resume: bool = False
     incremental_flush: bool = True
     generate_reproducers: bool = True
+    # auto = only when stderr is a terminal; on = also emit milestone lines in
+    # CI logs; off = silent. The campaign never writes to stdout, so callers
+    # can still parse its summary.
+    progress: str | bool = "auto"
+    progress_stream: Any = None
 
     def run(self) -> dict:
         if not 1 <= self.max_examples <= MAX_EXAMPLES_PER_ITERATION:
@@ -166,6 +172,14 @@ class Campaign:
 
         results_fh = results_file.open("a", encoding="utf-8")
         started = time.monotonic()
+        bar = make_progress(
+            self.max_examples,
+            desc=f"{target_obj.name}:{self.strategy_name}",
+            enabled=self.progress,
+            stream=self.progress_stream,
+            unit="input",
+            initial=len(results),
+        )
         consecutive_timeouts = 0
         hit_wall_clock_cap = False
         shrunk_failure = None
@@ -288,6 +302,10 @@ class Campaign:
                 and len(results) % self.checkpoint_interval == 0
             ):
                 _save_checkpoint()
+
+            bar.update(1)
+            bar.set_postfix(crashes=len(crash_records),
+                            timeouts=len(timeout_inputs))
 
             if self.mode == "hunt":
                 assert not r.outcome.is_crash, (
@@ -418,6 +436,7 @@ class Campaign:
             except (ValueError, AttributeError):
                 pass
             results_fh.close()
+            bar.close()
 
         elapsed = time.monotonic() - started
 
@@ -594,6 +613,8 @@ def main() -> None:
                     help="Save checkpoint every N inputs (default: 50)")
     ap.add_argument("--resume", action="store_true",
                     help="Resume from existing checkpoint in output directory")
+    ap.add_argument("--progress", choices=("auto", "on", "off"), default="auto",
+                    help="Progress bar: auto (TTY only), on, or off")
     ap.add_argument("--parallel", action="store_true",
                     help="Run across targets in parallel")
     ap.add_argument("--targets", nargs="+", default=None,
@@ -637,6 +658,7 @@ def main() -> None:
         adaptive_batch=args.adaptive_batch,
         checkpoint_interval=args.checkpoint_interval,
         resume=args.resume,
+        progress=args.progress,
     )
     s = c.run()
 

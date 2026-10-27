@@ -43,8 +43,7 @@ This project adheres to a Code of Conduct. By participating, you are expected to
 
 4. Install development dependencies:
    ```bash
-   pip install -r requirements.txt
-   pip install -r requirements-dev.txt  # if available
+   pip install -r requirements-dev.txt
    ```
 
 5. Build the harness:
@@ -191,19 +190,31 @@ def generate_strategy(grammar: Grammar, target: str) -> Strategy:
 
 ### Running Tests
 
-Run the test suite:
+Run the hermetic agent suite (no harness, network or credentials needed):
 ```bash
-python -m pytest tests/
+python -m pytest agent -q
 ```
 
-Run specific test files:
+Run the same checks the CI pipeline runs:
 ```bash
-python -m pytest tests/test_agent.py
+python scripts/ci.py --unit --cov
 ```
 
 Run with coverage:
 ```bash
-python -m pytest --cov=agent --cov=fuzzer tests/
+python -m pytest agent -q --cov=agent --cov-report=term-missing
+```
+
+Run the measurement-layer self-checks:
+```bash
+python -m agent.selftest
+python -m fuzzer.selftest
+```
+
+Run a single test module without pytest:
+```bash
+python -m agent.test_loop
+python -m agent.test_dx
 ```
 
 ### Writing Tests
@@ -212,6 +223,8 @@ python -m pytest --cov=agent --cov=fuzzer tests/
 - Test edge cases and error conditions
 - Use descriptive test names
 - Keep tests independent
+- Keep agent-loop tests hermetic: patch `agent.loop.Campaign` and point
+  `agent.loop.REPO_ROOT` at a temporary directory instead of running the harness
 
 Example:
 ```python
@@ -224,10 +237,31 @@ def test_strategy_validation_valid_strategy():
 
 ### Integration Testing
 
-Test the full fuzzing pipeline:
+Build the harness, then verify that a recorded transcript replays to
+byte-identical strategies:
 ```bash
-python -m agent.loop --backend replay --run-id test-run --max-iterations 1
+cd harness && ./build.sh asan && cd ..
+python scripts/ci.py --replay --run-id loop --iterations 5 --examples 10
 ```
+
+On Windows, run the replay check inside WSL2 or Docker; the sanitizer binary is
+a POSIX executable.
+
+### Debugging a Failing Test or Run
+
+```bash
+# Artifact-level report for a run
+python -m agent.debug --run-id loop --diagnose
+
+# The exact prompt and response for one call
+python -m agent.debug --run-id loop --call 3 --full
+
+# Structured events from a loop run with --debug
+python -m agent.loop --backend replay --run-id demo --debug
+python -m agent.debug --run-id demo --events
+```
+
+See [docs/developer-experience.md](docs/developer-experience.md) for details.
 
 ## Documentation
 

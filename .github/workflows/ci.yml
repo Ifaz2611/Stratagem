@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUNBUFFERED: "1"
+  STRATAGEM_NO_PROGRESS: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  unit:
+    name: unit (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Compile, test and self-check
+        run: python scripts/ci.py --unit --cov --json
+
+  replay:
+    name: replay identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: unit
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install build and Python dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential
+          pip install -r requirements-dev.txt
+
+      - name: Fetch pinned target
+        run: bash scripts/fetch_target.sh
+
+      - name: Build sanitizer harness
+        run: bash harness/build.sh asan
+
+      - name: Replay the recorded transcript
+        run: python scripts/ci.py --replay --run-id loop --iterations 5 --examples 10 --keep
+
+      - name: Upload replay artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: replay-failure-${{ github.run_id }}
+          path: runs/ci-replay-loop
+          if-no-files-found: ignore
+          retention-days: 7
+
+  docker:
+    name: container build
+    # Container builds are slower than the test jobs; run them on branch
+    # pushes rather than every pull request.
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: unit
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: stratagem:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke-test the image
+        run: |
+          docker run --rm stratagem:ci bash -lc '
+            mkdir -p runs/docker-smoke &&
+            cp -r runs/loop/transcript runs/docker-smoke/transcript &&
+            python -m agent.loop --backend replay --run-id docker-smoke \
+              -n 5 -i 1 --progress off --status off &&
+            python -m agent.debug --run-id docker-smoke --diagnose
+          '
