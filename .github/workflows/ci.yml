@@ -79,7 +79,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: replay-artifacts
-          path: runs/ci-replay-loop
+          path: runs/ci-replay-loop/
           if-no-files-found: ignore
           retention-days: 7
 
@@ -100,6 +100,18 @@ jobs:
           name: replay-artifacts
           path: runs/ci-replay-loop
 
+      - name: Prepare replay transcript for container
+        run: |
+          mkdir -p runs/ci-replay-loop
+          if [ -d "runs/ci-replay-loop/ci-replay-loop/transcript" ]; then
+            cp -r runs/ci-replay-loop/ci-replay-loop/* runs/ci-replay-loop/
+          fi
+          if [ ! -d "runs/ci-replay-loop/transcript" ] && [ -d "runs/loop/transcript" ]; then
+            cp -r runs/loop/transcript runs/ci-replay-loop/transcript
+          fi
+          echo "Transcript ready at runs/ci-replay-loop/transcript:"
+          ls -la runs/ci-replay-loop/transcript
+
       - uses: docker/setup-buildx-action@v3
 
       - name: Build image
@@ -114,10 +126,19 @@ jobs:
 
       - name: Smoke-test the image
         run: |
-          docker run --rm stratagem:ci bash -lc '
-            mkdir -p runs/docker-smoke &&
-            cp -r runs/ci-replay-loop/transcript runs/docker-smoke/transcript &&
-            python -m agent.loop --backend replay --run-id docker-smoke \
-              -n 5 -i 1 --progress off --status off &&
-            python -m agent.debug --run-id docker-smoke --diagnose
-          '
+          docker run --rm \
+            --security-opt seccomp=unconfined \
+            --cap-add SYS_PTRACE \
+            --ulimit stack=8388608:8388608 \
+            -v "$PWD/runs:/app/runs" \
+            stratagem:ci bash -lc '
+              mkdir -p runs/docker-smoke &&
+              if [ -d "runs/ci-replay-loop/transcript" ]; then
+                cp -r runs/ci-replay-loop/transcript runs/docker-smoke/transcript
+              elif [ -d "runs/loop/transcript" ]; then
+                cp -r runs/loop/transcript runs/docker-smoke/transcript
+              fi &&
+              python -m agent.loop --backend replay --run-id docker-smoke \
+                -n 5 -i 1 --progress off --status off &&
+              python -m agent.debug --run-id docker-smoke --diagnose
+            '
