@@ -36,13 +36,24 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from fuzzer.platform_compat import native_binary
+
 # Cap each harness invocation so a hang is recorded as a crash instead of
 # stalling the rest of the campaign.
 PER_RUN_TIMEOUT_S = 5.0
 DEFAULT_SLOW_THRESHOLD_S = 1.0
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_HARNESS = REPO_ROOT / "build" / "asan" / "harness"
+DEFAULT_HARNESS = native_binary(REPO_ROOT / "build" / "asan" / "harness")
+
+
+def _killed_returncode() -> int:
+    """Return code a killed child would report, portably.
+
+    ``signal.SIGKILL`` does not exist on Windows, where ``subprocess`` kills
+    with TerminateProcess instead.
+    """
+    return -int(getattr(signal, "SIGKILL", 9))
 
 
 class SanitizerType(str, Enum):
@@ -291,7 +302,7 @@ def run_one(
         dur = time.monotonic() - started
         return RunResult(
             outcome=Outcome.TIMEOUT,
-            returncode=-signal.SIGKILL,
+            returncode=_killed_returncode(),
             signal_name="TIMEOUT",
             stderr=(exc.stderr or b"").decode("utf-8", "replace"),
             duration_s=dur,

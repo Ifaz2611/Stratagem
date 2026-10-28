@@ -33,12 +33,19 @@ keeps it testable and replayable.
 """
 from __future__ import annotations
 
+import collections
 import json
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from fuzzer.platform_compat import atomic_write_text
+
 MIN_EXAMPLES = 64
+# The history is for the report and resume diagnostics, not for learning (the
+# controller keeps its state in the EMA and directive stats). A long run cannot
+# grow it without bound.
+MAX_OBSERVATIONS = 1000
 
 
 @dataclass
@@ -113,7 +120,8 @@ class HyperparameterTuner:
         self.max_repairs = 4
         self.yield_ema = 0.0
         self.clean_streak = 0
-        self.history: list[Observation] = []
+        self.history: collections.deque[Observation] = collections.deque(
+            maxlen=MAX_OBSERVATIONS)
         self.directive_stats: dict[str, DirectiveStats] = {
             d: DirectiveStats() for d in self.directives
         }
@@ -223,10 +231,8 @@ class HyperparameterTuner:
         if not self.state_path:
             return
         try:
-            self.state_path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = self.state_path.with_suffix(self.state_path.suffix + ".tmp")
-            tmp.write_text(json.dumps(self.to_json(), indent=2), encoding="utf-8")
-            tmp.replace(self.state_path)
+            atomic_write_text(
+                self.state_path, json.dumps(self.to_json(), indent=2))
         except OSError:
             # Tuning state is an optimisation. A read-only run directory must
             # not stop a campaign that is otherwise healthy.

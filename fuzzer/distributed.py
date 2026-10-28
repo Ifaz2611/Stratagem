@@ -51,6 +51,7 @@ from fuzzer.campaign import (
     Campaign,
 )
 from fuzzer.corpus import CORPUS_NAME, CorpusManager
+from fuzzer.platform_compat import atomic_write_text
 from fuzzer.runner import DEFAULT_HARNESS, DEFAULT_SLOW_THRESHOLD_S, PER_RUN_TIMEOUT_S
 
 PLAN_NAME = "plan.json"
@@ -65,11 +66,7 @@ FAILED_DIR = "failed"
 
 def _atomic_write(path: Path, text: str) -> None:
     """Write a file without exposing a partially written JSON document."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(
-        f".{path.name}.{os.getpid()}.{time.monotonic_ns()}.tmp")
-    tmp.write_text(text, encoding="utf-8")
-    os.replace(tmp, path)
+    atomic_write_text(path, text)
 
 
 def _slug(value: str) -> str:

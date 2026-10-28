@@ -41,6 +41,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from fuzzer.platform_compat import replace_file
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_STRATEGY_DIR = REPO_ROOT / "fuzzer" / "strategies"
 DEFAULT_CACHE_DIR = REPO_ROOT / "runs" / ".bytecode"
@@ -179,7 +181,7 @@ class StrategyLoader:
             tmp = cache_path.with_name(
                 f".{cache_path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
             tmp.write_bytes(payload)
-            os.replace(tmp, cache_path)
+            replace_file(tmp, cache_path)
         except OSError:
             # A read-only checkout still gets the in-memory cache; losing the
             # disk cache must not prevent the strategy from running.

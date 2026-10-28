@@ -22,6 +22,7 @@ them from exception text since SDK errors sometimes echo request details.
 
 from __future__ import annotations
 
+import collections
 import json
 import os
 import subprocess
@@ -42,6 +43,11 @@ _CLI_DISALLOWED = (
 
 DEFAULT_CLI_MODEL = "sonnet"
 DEFAULT_OPENAI_MODEL = "gpt-5"
+
+# Fallback events are counted and the most recent ones are useful for
+# diagnosing a flaky backend. The list is bounded because a long campaign can
+# survive thousands of upstream failures.
+MAX_FALLBACK_EVENTS = 1000
 
 
 @dataclass
@@ -686,7 +692,8 @@ class FallbackBackend:
                 failure_threshold=failure_threshold,
                 recovery_timeout_s=recovery_timeout_s,
             )
-        self.fallback_history: list[dict] = []
+        self.fallback_history: collections.deque[dict] = collections.deque(
+            maxlen=MAX_FALLBACK_EVENTS)
 
     @property
     def model(self) -> str:

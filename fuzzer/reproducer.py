@@ -241,6 +241,7 @@ class MinimalReproducerBundle:
             "python": out_dir / "reproduce.py",
             "c_test": out_dir / "reproduce.c",
             "shell": out_dir / "reproduce.sh",
+            "batch": out_dir / "reproduce.cmd",
             "stderr": out_dir / "sanitizer_output.txt",
         }
 
@@ -252,6 +253,8 @@ class MinimalReproducerBundle:
             files["c_test"].write_text(self.c_test_case, encoding="utf-8")
         if self.shell_script:
             files["shell"].write_text(self.shell_script, encoding="utf-8")
+            files["batch"].write_text(
+                generate_batch_reproducer(), encoding="utf-8")
         if self.raw_stderr:
             files["stderr"].write_text(self.raw_stderr, encoding="utf-8")
 
@@ -285,6 +288,8 @@ PAYLOAD = base64.b64decode("{payload_b64}")
 def main():
     root = Path(__file__).resolve().parent.parent.parent
     harness = root / "build" / "asan" / "harness"
+    if os.name == "nt" and harness.suffix.lower() != ".exe":
+        harness = harness.with_name(harness.name + ".exe")
 
     print(f"[*] Testing payload ({{len(PAYLOAD)}} bytes) against target '{target_name}'...")
     if harness.exists() and os.access(str(harness), os.X_OK):
@@ -342,7 +347,6 @@ def generate_c_reproducer(
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 static const unsigned char payload[] = {{
     {bytes_hex}
@@ -372,6 +376,9 @@ PAYLOAD="$DIR/{payload_file}"
 if [ ! -x "$BIN" ]; then
   BIN="$DIR/../../build/asan/harness"
 fi
+if [ ! -x "$BIN" ] && [ -x "$BIN.exe" ]; then
+  BIN="$BIN.exe"
+fi
 
 if [ ! -f "$PAYLOAD" ]; then
   echo "Payload not found: $PAYLOAD" >&2
@@ -383,6 +390,35 @@ export ASAN_OPTIONS="abort_on_error=1:symbolize=1:print_stacktrace=1"
 export UBSAN_OPTIONS="halt_on_error=1:abort_on_error=1:print_stacktrace=1"
 "$BIN" < "$PAYLOAD"
 echo "[*] Exit code: $?"
+'''
+
+
+def generate_batch_reproducer(
+    payload_file: str = "reproducer.bin",
+) -> str:
+    """Generate a Windows ``cmd`` counterpart to ``reproduce.sh``.
+
+    Native Windows is a supported build path for the harness, and a bundle
+    whose only runner is a bash script cannot be used there.
+    """
+    return f'''@echo off
+rem Quick reproduction script (Windows cmd)
+setlocal
+set "DIR=%~dp0"
+set "BIN=%DIR%..\\..\\build\\asan\\harness.exe"
+if not exist "%BIN%" set "BIN=%DIR%..\\..\\build\\asan\\harness"
+set "PAYLOAD=%DIR%{payload_file}"
+
+if not exist "%PAYLOAD%" (
+  echo Payload not found: %PAYLOAD% 1>&2
+  exit /b 1
+)
+
+echo [*] Replaying %PAYLOAD% through %BIN%...
+set "ASAN_OPTIONS=abort_on_error=1:symbolize=1:print_stacktrace=1"
+set "UBSAN_OPTIONS=halt_on_error=1:abort_on_error=1:print_stacktrace=1"
+"%BIN%" < "%PAYLOAD%"
+echo [*] Exit code: %ERRORLEVEL%
 '''
 
 

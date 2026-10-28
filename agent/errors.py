@@ -23,9 +23,10 @@ import os
 import re
 import traceback
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
+
+from fuzzer.timeutil import utc_iso
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RUNS_ROOT = REPO_ROOT / "runs"
@@ -284,7 +285,7 @@ class DebugLog:
 
     def event(self, event: str, **fields: Any) -> None:
         record = {
-            "ts": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+            "ts": utc_iso(timespec="milliseconds"),
             "event": event,
         }
         for key, value in fields.items():

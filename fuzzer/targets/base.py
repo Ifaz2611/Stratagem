@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from fuzzer.platform_compat import native_binary
 from fuzzer.runner import (
     DEFAULT_HARNESS,
     PER_RUN_TIMEOUT_S,
@@ -86,10 +87,17 @@ class BaseTarget(abc.ABC):
 
     def harness_for_sanitizer(self, sanitizer: str = "asan") -> Path | None:
         """Get the compiled harness binary for the given sanitizer if available."""
-        p = REPO_ROOT / "build" / sanitizer / "harness"
+        p = native_binary(REPO_ROOT / "build" / sanitizer / "harness")
         if p.exists() and os.access(str(p), os.X_OK):
             return p
-        return self.harness_binary
+        return self.resolved_harness_binary
+
+    @property
+    def resolved_harness_binary(self) -> Path | None:
+        """The platform-correct native binary path, including ``.exe``."""
+        if self.harness_binary is None:
+            return None
+        return native_binary(self.harness_binary)
 
     def run_native(
         self,
@@ -204,7 +212,7 @@ class BaseTarget(abc.ABC):
         Uses the native binary if available and executable; otherwise falls
         back to the target's reference runner.
         """
-        active_binary = self.harness_binary
+        active_binary = self.resolved_harness_binary
         if sanitizers and len(sanitizers) == 1:
             active_binary = self.harness_for_sanitizer(sanitizers[0]) or active_binary
 

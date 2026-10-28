@@ -149,7 +149,10 @@ class ResultCache:
         """Build the reusable, payload-independent half of a cache key."""
         target_harness = harness
         if target_harness is None:
-            target_harness = getattr(target, "harness_binary", None)
+            target_harness = (
+                getattr(target, "resolved_harness_binary", None)
+                or getattr(target, "harness_binary", None)
+            )
         return {
             "v": SCHEMA_VERSION,
             "target": getattr(target, "name", str(target)),

@@ -30,12 +30,16 @@ from typing import Any
 SIGNATURE_FRAMES = 5
 
 _RE_SANITIZER_HEADER = re.compile(
-    r"(?:==\d+==)?(?:ERROR|WARNING|FATAL):\s+(AddressSanitizer|LeakSanitizer|ThreadSanitizer|MemorySanitizer):\s+([a-zA-Z0-9_\- ]+?)(?:\s*\(|\s+on\s+|\n|$)"
+    r"(?:==\d+==)?(?:ERROR|WARNING|FATAL):\s*(AddressSanitizer|LeakSanitizer|ThreadSanitizer|MemorySanitizer):\s*([a-zA-Z0-9_\- ]+?)(?:\s*\(|\s+on\s+|\n|$)"
 )
 _RE_UBSAN_ERROR = re.compile(r"runtime error:\s+(.+?)(?:\n|$)")
 _RE_ACCESS = re.compile(r"^\s*(?:Previous\s+)?(READ|WRITE)\s+of\s+size\s+(\d+)", re.M | re.I)
+# The file slot accepts Windows drive letters and both path separators. The old
+# `[^\s:]+` stopped at the colon in `C:\src\mxml-file.c`, so every native
+# Windows crash lost its source file and split signatures that should merge.
 _RE_FRAME = re.compile(
-    r"^\s*#(\d+)\s+(?:0x[0-9a-f]+\s+in\s+)?(\S+)\s*(?:([^\s:]+):(\d+)|\((.*?)\))?",
+    r"^\s*#(\d+)\s+(?:0x[0-9a-fA-F]+\s+in\s+)?(\S+)\s*"
+    r"(?:((?:[A-Za-z]:)?[^\s:]+):(\d+)|\((.*?)\))?",
     re.M,
 )
 
@@ -223,6 +227,10 @@ class CrashReport:
 def _keep(func: str, fname: str | None) -> bool:
     if func in _DROP_EXACT:
         return False
+    if func.startswith("??"):
+        # An unsymbolised frame carries no root-cause information; keeping it
+        # as the top frame makes every such crash share a meaningless site.
+        return False
     if any(func.startswith(p) for p in _DROP_PREFIXES):
         return False
     if fname and fname in _DROP_FILES:
@@ -275,7 +283,9 @@ def parse_report(stderr: str) -> CrashReport | None:
         func = fm.group(2)
         fname = fm.group(3)
         if fname:
-            fname = fname.rsplit("/", 1)[-1]
+            # Keep only the basename so a build directory (or a Windows drive
+            # letter) cannot split one defect into several signatures.
+            fname = re.split(r"[\\/]", fname)[-1]
         if _keep(func, fname):
             rep.frames.append(Frame(func=func, file=fname))
 

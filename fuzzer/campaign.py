@@ -41,12 +41,18 @@ from fuzzer.runner import (
 )
 from fuzzer.result_cache import ResultCache, cache_enabled_by_env
 from fuzzer.strategy_loader import StrategyLoader, get_default_loader
+from fuzzer.timeutil import utc_iso
 from agent.progress import make_progress
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 MAX_EXAMPLES_PER_ITERATION = 500
 MAX_WALL_CLOCK_S = 10 * 60
+# Reproducers are generated once per distinct sanitizer signature, so retaining
+# every crashing payload only wastes memory in a long campaign. The cap bounds
+# the artifact pass without changing what is written to disk (each crash is
+# persisted as soon as it happens).
+MAX_REPRODUCER_INPUTS = 64
 
 
 class CampaignWallClockExceeded(BaseException):
@@ -66,9 +72,28 @@ SUPPRESSED = [
 
 
 def _encode(doc: str | bytes) -> bytes:
-    """Serialise a generated document to the bytes the harness will read."""
-    if isinstance(doc, bytes):
-        return doc
+    """Serialise a generated document to the bytes the harness will read.
+
+    Three conventions meet here:
+
+    * ``bytes``/``bytearray``/``memoryview`` already are the payload;
+    * U+DC80..U+DCFF are the ``surrogateescape`` sentinels for raw bytes
+      0x80..0xFF (the strategies use this to describe non-UTF-8 input);
+    * ordinary text is UTF-8.
+
+    Valid surrogate pairs (U+D800..U+DBFF followed by U+DC00..U+DFFF) are the
+    one ambiguous case: Python can hold a pair either as one astral code point
+    or as two surrogate code points. Encoding the pair element-wise with
+    ``surrogatepass`` yields CESU-8 (six bytes), which is not the UTF-8 the
+    generator meant. Combine a *valid* pair into its scalar first; a lone
+    surrogate still takes the documented ``surrogatepass`` path.
+    """
+    if isinstance(doc, (bytes, bytearray, memoryview)):
+        return bytes(doc)
+    if not isinstance(doc, str):
+        raise TypeError(
+            f"document must be str or bytes-like, not {type(doc).__name__}")
+
     out = bytearray()
     ordinary: list[str] = []
 
@@ -77,13 +102,26 @@ def _encode(doc: str | bytes) -> bytes:
             out.extend("".join(ordinary).encode("utf-8", "surrogatepass"))
             ordinary.clear()
 
-    for ch in doc:
+    i = 0
+    n = len(doc)
+    while i < n:
+        ch = doc[i]
         cp = ord(ch)
+        if 0xD800 <= cp <= 0xDBFF and i + 1 < n:
+            low = ord(doc[i + 1])
+            if 0xDC00 <= low <= 0xDFFF:
+                flush()
+                scalar = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00)
+                out.extend(chr(scalar).encode("utf-8"))
+                i += 2
+                continue
         if 0xDC80 <= cp <= 0xDCFF:
             flush()
             out.append(cp - 0xDC00)
-        else:
-            ordinary.append(ch)
+            i += 1
+            continue
+        ordinary.append(ch)
+        i += 1
     flush()
     return bytes(out)
 
@@ -154,8 +192,13 @@ class Campaign:
         feats: list[Any] = []
         crash_records: list[dict] = []
         crash_inputs: list[tuple[str, bytes, str]] = []
-        timeout_inputs: list[tuple[str, bytes, str, float]] = []
-        slow_inputs: list[tuple[str, bytes, float]] = []
+        crash_signatures: set[str] = set()
+        # Counters rather than payload lists: a timeout or slow input has
+        # already been written to its artifact directory, and only the total is
+        # reported. Keeping the bytes here made a long campaign retain one copy
+        # of every slow input for no consumer.
+        timeout_count = 0
+        slow_input_count = 0
         corpus_mgr = corpus.CorpusManager(max_entries=self.max_corpus_entries)
 
         # Result caching is opt-in (or enabled by environment for operators),
@@ -249,16 +292,17 @@ class Campaign:
                 "wall_clock_elapsed_s": round(elapsed_now, 2),
                 "crashes": len(crash_records),
                 "unique_crashes": len({r["sha"] for r in results if r["outcome"] in ("crash", "timeout")}),
-                "timeouts": len(timeout_inputs),
-                "slow_inputs": len(slow_inputs),
+                "timeouts": timeout_count,
+                "slow_inputs": slow_input_count,
                 "interrupted": is_interrupted,
                 "timestamp": time.time(),
+                "timestamp_utc": utc_iso(),
                 "corpus_manifest": manifest,
             }
             checkpoint_file.write_text(json.dumps(cp_data, indent=2), encoding="utf-8")
 
         def _process_one(doc: str | bytes) -> None:
-            nonlocal consecutive_timeouts
+            nonlocal consecutive_timeouts, timeout_count, slow_input_count
             if time.monotonic() - started >= self.wall_clock_cap_s:
                 raise CampaignWallClockExceeded()
             payload = _encode(doc)
@@ -294,7 +338,7 @@ class Campaign:
             # Timeout handling
             if r.outcome == Outcome.TIMEOUT:
                 consecutive_timeouts += 1
-                timeout_inputs.append((r.input_sha256, payload, r.stderr, r.duration_s))
+                timeout_count += 1
                 timeout_dir.mkdir(parents=True, exist_ok=True)
                 (timeout_dir / f"{r.input_sha256[:16]}.bin").write_bytes(payload)
                 (timeout_dir / f"{r.input_sha256[:16]}.meta.json").write_text(
@@ -315,7 +359,7 @@ class Campaign:
 
             # Slow input tracking
             if r.is_slow and r.outcome != Outcome.TIMEOUT:
-                slow_inputs.append((r.input_sha256, payload, r.duration_s))
+                slow_input_count += 1
                 slow_dir.mkdir(parents=True, exist_ok=True)
                 (slow_dir / f"{r.input_sha256[:16]}.bin").write_bytes(payload)
                 (slow_dir / f"{r.input_sha256[:16]}.meta.json").write_text(
@@ -330,7 +374,17 @@ class Campaign:
 
             # Crash handling and immediate persistence
             if r.outcome.is_crash:
-                crash_inputs.append((r.input_sha256, payload, r.stderr))
+                record = triage.parse_report(r.stderr)
+                crash_sig = (record.signature if record
+                             else f"unparsed-{r.signal_name or r.returncode}")
+                # Reproducers are deduplicated by signature later; retaining
+                # every payload until the end only grows the process. Keep the
+                # first input for each signature, up to a fixed bound. The
+                # crash itself is still written to disk below.
+                if (crash_sig not in crash_signatures
+                        and len(crash_inputs) < MAX_REPRODUCER_INPUTS):
+                    crash_signatures.add(crash_sig)
+                    crash_inputs.append((r.input_sha256, payload, r.stderr))
                 crash_records.append({
                     "sha": r.input_sha256,
                     "stderr": r.stderr,
@@ -354,7 +408,7 @@ class Campaign:
 
             bar.update(1)
             bar.set_postfix(crashes=len(crash_records),
-                            timeouts=len(timeout_inputs))
+                            timeouts=timeout_count)
 
             if self.mode == "hunt":
                 assert not r.outcome.is_crash, (
@@ -552,8 +606,8 @@ class Campaign:
         summary["corpus_stats"] = corpus_mgr.stats()
         summary["distilled_corpus"] = distilled_manifest
         summary["distilled_stats"] = distilled.stats()
-        summary["timeout_count"] = len(timeout_inputs)
-        summary["slow_input_count"] = len(slow_inputs)
+        summary["timeout_count"] = timeout_count
+        summary["slow_input_count"] = slow_input_count
         summary["slow_threshold_s"] = self.slow_threshold_s
         summary["timeout_threshold_s"] = self.timeout_s
         summary["reproducers"] = reproducers_manifest
@@ -679,6 +733,7 @@ class Campaign:
             "strategy": self.strategy_name,
             "mode": self.mode,
             "random_seed": self.random_seed,
+            "generated_at_utc": utc_iso(),
             "examples": n,
             "wall_clock_s": round(elapsed, 2),
             "outcomes": counts,

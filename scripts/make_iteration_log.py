@@ -14,6 +14,9 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO))
+
+from fuzzer.timeutil import utc_iso  # noqa: E402
 
 
 def cell(vals) -> str:
@@ -38,6 +41,7 @@ def main(run_id: str = "loop") -> int:
 
     lines = [
         f"# Iteration log: {run_id}", "",
+        f"_Generated {utc_iso()} (UTC)._", "",
         f"Backend `{loop_summary.get('backend')}`, model `{loop_summary.get('model')}`, "
         f"{loop_summary.get('max_examples')} examples per iteration.", "",
         "Every metric is the **mean of 3 independent trials** (Hypothesis seeds "

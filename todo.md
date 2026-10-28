@@ -81,30 +81,14 @@ This document outlines potential improvements and new features for Stratagem, th
 - [ ] Study reproducibility across different LLM providers/models
 - [ ] Analyze the impact of prompt engineering on results
 
-## Infrastructure
-
-### Deployment
-- [ ] Containerize with multi-architecture support (ARM64)
-- [ ] Add cloud deployment guides (AWS, GCP, Azure)
-- [ ] Implement resource limiting and quota management
-- [ ] Add monitoring and alerting for long-running campaigns
-- [ ] Create Docker Compose setup for complete environment
-
-### Security
-- [ ] Add input sanitization for generated strategies
-- [ ] Implement sandboxing for untrusted code execution
-- [ ] Add rate limiting for LLM API calls
-- [ ] Implement secure secret management
-- [ ] Add audit logging for all operations
-
 ## Backlog
 
 ### Bug Fixes
-- [ ] Investigate rare encoding issues in byte serialization
-- [ ] Fix potential memory leaks in long-running campaigns
-- [ ] Address edge cases in diagnostic normalization
-- [ ] Fix timezone handling in timestamped reports
-- [ ] Resolve Windows compatibility issues
+- [x] Investigate rare encoding issues in byte serialization
+- [x] Fix potential memory leaks in long-running campaigns
+- [x] Address edge cases in diagnostic normalization
+- [x] Fix timezone handling in timestamped reports
+- [x] Resolve Windows compatibility issues
 
 ### Technical Debt
 - [ ] Refactor large functions in loop.py
@@ -112,9 +96,5 @@ This document outlines potential improvements and new features for Stratagem, th
 - [ ] Reduce code duplication in strategy modules
 - [ ] Standardize error handling patterns
 - [ ] Improve logging consistency
-
-### Nice-to-Have
-- [ ] Add GUI for campaign monitoring
-- [ ] Add support for fuzzing multiple targets in one campaign
 
 ---

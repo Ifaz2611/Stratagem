@@ -50,8 +50,9 @@ _SUBS: list[tuple[re.Pattern[str], str]] = [
                 r".*?(-->|\]\]>|\?>|>) on line"),
      r"<%s\1 cannot be a second root node after <%s\2 on line"),
     # Hex literals, e.g. "Bad control character 0x01 ...". Before the bare-number
-    # rule so 0x1f does not lose its hex digits.
-    (re.compile(r"0x[0-9a-fA-F]+"), "0x%x"),
+    # rule so 0x1f does not lose its hex digits. Both cases occur in diagnostics
+    # that are re-normalised from different harness builds.
+    (re.compile(r"0[xX][0-9a-fA-F]+"), "0x%x"),
     # A quoted slot whose content is itself a single quote. mxml interpolates the
     # offending character, so when that character is an apostrophe the message
     # contains three consecutive quotes. The general quoted-string rule below
@@ -112,12 +113,27 @@ _TRUNCATED = "<truncated at mxml's 1024-byte message buffer>"
 
 
 def normalize(message: str) -> str:
-    """Collapse one diagnostic to its format-string template."""
-    out = message.strip()
+    """Collapse one diagnostic to its format-string template.
+
+    The buffer check runs before stripping whitespace: mxml writes at most 1023
+    bytes, and a truncated message can end in a run of spaces that ``strip``
+    would silently hide, making one call site look like two templates.
+    """
+    out = message if isinstance(message, str) else str(message)
     if len(out.encode("utf-8", "surrogatepass")) >= _MXML_MSG_BYTES:
         # The descriptive part of the message was pushed out of the buffer, so
         # there is nothing left to identify which call site emitted it.
         return _TRUNCATED
+    # A raw NUL ends a C string. mxml truncates the message there, and the
+    # harness can still deliver trailing bytes, so drop them rather than
+    # letting them become part of the template.
+    nul = out.find("\x00")
+    if nul >= 0:
+        out = out[:nul]
+    out = out.strip()
+    # CRLF can survive when a caller normalises a stored stderr blob rather
+    # than a line already split by the runner.
+    out = out.replace("\r\n", "\n").replace("\r", "\n")
     for pattern, repl in _SUBS:
         out = pattern.sub(repl, out)
     return out

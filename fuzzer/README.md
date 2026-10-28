@@ -284,10 +284,11 @@ def documents() -> st.SearchStrategy[str]:
 Generated strategies return Python `str`, but mxml receives bytes. The serializer handles this:
 
 - U+DC80..U+DCFF → raw bytes 0x80..0xFF (surrogateescape)
+- A valid UTF-16 surrogate pair → one UTF-8 scalar (e.g. U+D83D U+DE00 → 😀)
 - Other lone surrogates → invalid UTF-8 (surrogatepass)
 - Regular text → UTF-8
 
-This preserves raw byte-oriented cases (UTF-16 BOMs, malformed UTF-8) through the str-only interface.
+Pairs are combined before the raw-byte rule, so `"\ud83d\udc80"` is U+1F080 rather than a high surrogate followed by the sentinel for 0x80. This preserves raw byte-oriented cases (UTF-16 BOMs, malformed UTF-8) through the str-only interface.
 
 ### Mode Selection
 

@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from fuzzer import significance, triage
+from fuzzer.timeutil import utc_iso
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -320,6 +321,7 @@ def generate_html_dashboard(
     total_examples = sum(it.get("examples", 500) for it in iterations)
 
     # Generate HTML
+    generated_at = utc_iso()
     html_content = f'''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -394,6 +396,7 @@ def generate_html_dashboard(
       </div>
       <div>
         <span class="meta-badge">{len(iterations)} Iterations / Cells</span>
+        <span class="meta-badge" title="All timestamps in this report are UTC">Generated {generated_at}</span>
       </div>
     </header>
 

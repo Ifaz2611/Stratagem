@@ -25,6 +25,10 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tupl
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_PROMPTS_DIR = REPO_ROOT / "agent" / "prompts"
 
+# Keep a bounded observation window per prompt variant. A/B evaluation only
+# needs the newest trials, and an experiment can run for days.
+MAX_TRIALS_PER_VARIANT = 5000
+
 
 @dataclass
 class PromptVersion:
@@ -445,6 +449,12 @@ class PromptABTester:
             )},
         }
         self._trials[variant].append(record)
+        # A long-running experiment should not keep every observation in
+        # memory forever; the most recent window is enough for the statistical
+        # comparison and the report.
+        excess = len(self._trials[variant]) - MAX_TRIALS_PER_VARIANT
+        if excess > 0:
+            del self._trials[variant][:excess]
 
     def get_trials(self, variant: str) -> List[Dict[str, Any]]:
         """Return raw trial observations for a variant."""

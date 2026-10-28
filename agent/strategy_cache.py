@@ -25,13 +25,13 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from agent.scoring import score_summary
+from fuzzer.platform_compat import atomic_write_text
+from fuzzer.timeutil import utc_iso
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CACHE_DIR = REPO_ROOT / "runs" / ".strategy_cache"
@@ -262,14 +262,12 @@ class StrategyCache:
             score=round(score, 4),
             run_id=run_id,
             iteration=int(iteration),
-            created_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            created_at=utc_iso(),
             summary=_compact_summary(summary),
         )
         self.entries_dir.mkdir(parents=True, exist_ok=True)
         dest = self.entries_dir / f"{entry.key}.json"
-        tmp = dest.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(entry.to_json(), indent=2), encoding="utf-8")
-        os.replace(tmp, dest)
+        atomic_write_text(dest, json.dumps(entry.to_json(), indent=2))
         self.prune()
         return entry
 
