@@ -20,9 +20,10 @@ import gzip
 import hashlib
 import json
 import math
+import types
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable, Iterator
 
 CORPUS_NAME = "corpus.jsonl.gz"
 DISTILLED_CORPUS_NAME = "corpus_distilled.jsonl.gz"
@@ -127,7 +128,7 @@ class CorpusManager:
     def __len__(self) -> int:
         return len(self.entries)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[CorpusEntry]:
         return iter(self.entries)
 
     def add(
@@ -481,7 +482,7 @@ class CorpusManager:
         """Return all payloads in current corpus."""
         return [e.payload for e in self.entries]
 
-    def iter_payloads(self):
+    def iter_payloads(self) -> Iterator[bytes]:
         """Iterate payloads without materializing a second list."""
         for e in self.entries:
             yield e.payload
@@ -590,12 +591,17 @@ class CorpusWriter:
     def __enter__(self) -> "CorpusWriter":
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: types.TracebackType | None,
+    ) -> None:
         self.close()
 
 
 # ---------------------------------------------------------------- Backward-compatible API
-def write_corpus(path: Path, payloads) -> dict:
+def write_corpus(path: Path, payloads: Iterable[bytes]) -> dict:
     """Write a campaign's inputs from any iterable. Returns a manifest.
 
     Accepting an iterable means callers can pass ``CorpusManager.iter_payloads``
@@ -610,7 +616,7 @@ def write_corpus(path: Path, payloads) -> dict:
     return manifest
 
 
-def iter_corpus(path: Path):
+def iter_corpus(path: Path) -> Iterator[bytes]:
     """Yield corpus payloads one record at a time."""
     with gzip.open(path, "rt", encoding="utf-8") as fh:
         for line in fh:
@@ -623,7 +629,7 @@ def read_corpus(path: Path) -> list[bytes]:
     return list(iter_corpus(path))
 
 
-def corpus_digest(payloads) -> str:
+def corpus_digest(payloads: Iterable[bytes]) -> str:
     d = hashlib.sha256()
     for p in payloads:
         d.update(hashlib.sha256(p).digest())
@@ -656,9 +662,9 @@ def replay_and_verify(
     harness = harness or DEFAULT_HARNESS
     payloads = read_corpus(iteration_dir / CORPUS_NAME)
     recorded = [
-        json.loads(l)
-        for l in (iteration_dir / "results.jsonl").read_text(encoding="utf-8").splitlines()
-        if l.strip()
+        json.loads(line)
+        for line in (iteration_dir / "results.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
     ]
 
     rep = ReplayReport(inputs=len(payloads), outcome_mismatches=[])

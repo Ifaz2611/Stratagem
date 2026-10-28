@@ -2,19 +2,23 @@
 from __future__ import annotations
 
 import struct
+from typing import Any
 from hypothesis import strategies as st
+
+from fuzzer.strategies.common import (
+    bytes_to_surrogate,
+    make_mixture_documents,
+    surrogate_to_bytes,
+)
 
 NAME = "dns_baseline"
 DESCRIPTION = "Hypothesis strategy generating binary DNS packets (RFC 1035)"
 
-
-def _to_str(data: bytes) -> str:
-    """Encode raw bytes via surrogateescape for str-only strategy interface."""
-    return data.decode("utf-8", "surrogateescape")
+_to_str = bytes_to_surrogate
 
 
 @st.composite
-def _well_formed_dns(draw):
+def _well_formed_dns(draw: Any) -> str:
     tx_id = draw(st.integers(min_value=0, max_value=0xFFFF))
     # Standard query: QR=0, Opcode=0, RD=1 -> flags = 0x0100
     flags = 0x0100
@@ -39,8 +43,8 @@ def _well_formed_dns(draw):
 
 
 @st.composite
-def _near_miss_dns(draw):
-    base_bytes = draw(_well_formed_dns()).encode("utf-8", "surrogateescape")
+def _near_miss_dns(draw: Any) -> str:
+    base_bytes = surrogate_to_bytes(draw(_well_formed_dns()))
     kind = draw(st.sampled_from(["label_overflow", "truncated_qtype", "bad_qclass"]))
     if kind == "label_overflow":
         # Label length byte > 63
@@ -61,7 +65,7 @@ def _near_miss_dns(draw):
 
 
 @st.composite
-def _byte_hostile_dns(draw):
+def _byte_hostile_dns(draw: Any) -> str:
     kind = draw(st.sampled_from(["trunc_header", "ptr_loop", "ptr_oob", "nul"]))
     if kind == "trunc_header":
         return _to_str(b"\x12\x34\x01\x00\x00")  # Only 5 bytes
@@ -79,8 +83,4 @@ def _byte_hostile_dns(draw):
 
 
 def documents() -> st.SearchStrategy[str]:
-    return st.one_of(
-        st.tuples(st.just("wf"), _well_formed_dns()).map(lambda t: t[1]),
-        st.tuples(st.just("nm"), _near_miss_dns()).map(lambda t: t[1]),
-        st.tuples(st.just("bh"), _byte_hostile_dns()).map(lambda t: t[1]),
-    )
+    return make_mixture_documents(_well_formed_dns(), _near_miss_dns(), _byte_hostile_dns())

@@ -18,9 +18,7 @@ from unittest.mock import MagicMock
 from agent.llm import (
     AllBackendsFailedError,
     CircuitBreaker,
-    CircuitOpenError,
     CircuitState,
-    ClaudeCLIBackend,
     FallbackBackend,
     LLMError,
     LLMResponse,

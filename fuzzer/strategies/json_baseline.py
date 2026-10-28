@@ -10,7 +10,15 @@ Generates structured JSON documents spanning:
 from __future__ import annotations
 
 import json
+from typing import Any
 from hypothesis import strategies as st
+
+from fuzzer.strategies.common import (
+    inject_bom,
+    inject_control_chars,
+    inject_nul,
+    make_mixture_documents,
+)
 
 NAME = "json_baseline"
 DESCRIPTION = "Hypothesis strategy generating structured JSON documents and mutations"
@@ -24,7 +32,7 @@ _PRIMITIVES = st.one_of(
 )
 
 
-def _json_values():
+def _json_values() -> st.SearchStrategy[Any]:
     return st.recursive(
         _PRIMITIVES,
         lambda children: st.one_of(
@@ -36,13 +44,13 @@ def _json_values():
 
 
 @st.composite
-def _well_formed_json(draw):
+def _well_formed_json(draw: Any) -> str:
     val = draw(_json_values())
     return json.dumps(val)
 
 
 @st.composite
-def _near_miss_json(draw):
+def _near_miss_json(draw: Any) -> str:
     """Syntactically invalid but JSON-shaped input."""
     base = draw(_well_formed_json())
     mutation = draw(st.sampled_from([
@@ -66,16 +74,16 @@ def _near_miss_json(draw):
 
 
 @st.composite
-def _byte_hostile_json(draw):
+def _byte_hostile_json(draw: Any) -> str:
     """Inputs with control characters, bad UTF-8, or embedded NUL."""
     base = draw(_well_formed_json())
     kind = draw(st.sampled_from(["control", "nul", "bom", "unclosed_str"]))
     if kind == "control":
-        return base + '\x01\x02'
+        return inject_control_chars(base, chars="\x01\x02")
     elif kind == "nul":
-        return base + '\x00'
+        return inject_nul(base)
     elif kind == "bom":
-        return '\ufeff' + base
+        return inject_bom(base)
     elif kind == "unclosed_str":
         return '{"key": "unclosed string'
     return base
@@ -83,8 +91,4 @@ def _byte_hostile_json(draw):
 
 def documents() -> st.SearchStrategy[str]:
     """Mixture across the three classes."""
-    return st.one_of(
-        st.tuples(st.just("wf"), _well_formed_json()).map(lambda t: t[1]),
-        st.tuples(st.just("nm"), _near_miss_json()).map(lambda t: t[1]),
-        st.tuples(st.just("bh"), _byte_hostile_json()).map(lambda t: t[1]),
-    )
+    return make_mixture_documents(_well_formed_json(), _near_miss_json(), _byte_hostile_json())

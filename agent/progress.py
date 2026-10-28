@@ -29,6 +29,7 @@ import shutil
 import sys
 import threading
 import time
+import types
 from dataclasses import dataclass, field
 from typing import Any, TextIO
 
@@ -216,7 +217,12 @@ class ProgressBar:
     def __enter__(self) -> "ProgressBar":
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: types.TracebackType | None,
+    ) -> None:
         self.close()
 
     def _maybe_draw(self, force: bool = False) -> None:

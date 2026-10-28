@@ -36,7 +36,7 @@ from __future__ import annotations
 import collections
 import json
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from fuzzer.platform_compat import atomic_write_text

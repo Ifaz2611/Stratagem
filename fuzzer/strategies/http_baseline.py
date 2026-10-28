@@ -1,7 +1,15 @@
 """Baseline Hypothesis strategy for HTTP protocol parser target."""
 from __future__ import annotations
 
+from typing import Any
 from hypothesis import strategies as st
+
+from fuzzer.strategies.common import (
+    inject_bom,
+    inject_control_chars,
+    inject_nul,
+    make_mixture_documents,
+)
 
 NAME = "http_baseline"
 DESCRIPTION = "Hypothesis strategy generating structured HTTP requests and mutations"
@@ -17,7 +25,7 @@ _HEADERS = st.dictionaries(
 
 
 @st.composite
-def _well_formed_http(draw):
+def _well_formed_http(draw: Any) -> str:
     method = draw(_METHODS)
     path = draw(_PATHS)
     version = draw(_VERSIONS)
@@ -29,7 +37,7 @@ def _well_formed_http(draw):
 
 
 @st.composite
-def _near_miss_http(draw):
+def _near_miss_http(draw: Any) -> str:
     base = draw(_well_formed_http())
     kind = draw(st.sampled_from(["smuggle", "bad_version", "bad_header", "bare_newline"]))
     if kind == "smuggle":
@@ -44,23 +52,19 @@ def _near_miss_http(draw):
 
 
 @st.composite
-def _byte_hostile_http(draw):
+def _byte_hostile_http(draw: Any) -> str:
     base = draw(_well_formed_http())
     kind = draw(st.sampled_from(["control", "nul", "bom", "unterminated"]))
     if kind == "control":
-        return base.replace("Host: ", "Host: \x01\x02")
+        return inject_control_chars(base, target="Host: ", chars="\x01\x02")
     elif kind == "nul":
-        return base + "\x00"
+        return inject_nul(base)
     elif kind == "bom":
-        return "\ufeff" + base
+        return inject_bom(base)
     elif kind == "unterminated":
         return base.rstrip("\r\n")
     return base
 
 
 def documents() -> st.SearchStrategy[str]:
-    return st.one_of(
-        st.tuples(st.just("wf"), _well_formed_http()).map(lambda t: t[1]),
-        st.tuples(st.just("nm"), _near_miss_http()).map(lambda t: t[1]),
-        st.tuples(st.just("bh"), _byte_hostile_http()).map(lambda t: t[1]),
-    )
+    return make_mixture_documents(_well_formed_http(), _near_miss_http(), _byte_hostile_http())

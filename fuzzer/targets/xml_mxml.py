@@ -12,7 +12,7 @@ from fuzzer.runner import (
     Outcome,
     RunResult,
 )
-from fuzzer.targets.xml_base import XMLTarget, REPO_ROOT
+from fuzzer.targets.xml_base import XMLTarget
 
 
 class MxmlTarget(XMLTarget):

@@ -15,12 +15,8 @@ from __future__ import annotations
 
 import base64
 import json
-import os
-import re
-import shutil
-import subprocess
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
@@ -29,8 +25,6 @@ from fuzzer.runner import (
     DEFAULT_HARNESS,
     PER_RUN_TIMEOUT_S,
     Outcome,
-    RunResult,
-    run_one,
 )
 from fuzzer.targets import BaseTarget, get_target
 

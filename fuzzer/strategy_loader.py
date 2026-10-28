@@ -58,6 +58,28 @@ _MAX_CODE_CACHE = 64
 class StrategyError(RuntimeError):
     """A strategy module is missing, malformed, or cannot be loaded."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        hint: str = "",
+        context: dict[str, Any] | None = None,
+        cause: BaseException | None = None,
+    ):
+        super().__init__(message)
+        self.message = message
+        self.hint = hint
+        self.context = dict(context or {})
+        self.cause = cause
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "type": type(self).__name__,
+            "message": self.message,
+            "hint": self.hint,
+            "context": self.context,
+        }
+
 
 @dataclass
 class LoadedStrategy:

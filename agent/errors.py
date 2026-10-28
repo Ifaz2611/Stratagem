@@ -168,6 +168,39 @@ def format_exception(
     return "\n".join(parts)
 
 
+def format_error_summary(
+    exc: BaseException,
+    *,
+    context: dict[str, Any] | None = None,
+) -> tuple[str, str]:
+    """Return a 2-tuple (headline, hint) for concise standardized error logging."""
+    if isinstance(exc, AgentError):
+        hint = exc.hint or explain_exception(exc)
+        head = f"{type(exc).__name__}: {exc.message}"
+    else:
+        hint = explain_exception(exc)
+        head = f"{type(exc).__name__}: {exc}"
+    return head, hint
+
+
+def standardize_error(
+    exc: BaseException,
+    *,
+    hint: str = "",
+    context: dict[str, Any] | None = None,
+) -> AgentError:
+    """Wrap or enrich any exception into a standardized AgentError."""
+    if isinstance(exc, AgentError):
+        if hint and not exc.hint:
+            exc.hint = hint
+        if context:
+            exc.context.update(context)
+        return exc
+    resolved_hint = hint or explain_exception(exc)
+    return AgentError(str(exc), hint=resolved_hint, context=context, cause=exc)
+
+
+
 def validation_hint(stage: str, *, run_id: str = "<run-id>") -> str:
     """A concrete next step for each strategy-validation gate."""
     stage = (stage or "").lower()
@@ -210,7 +243,7 @@ def explain_exception(exc: BaseException) -> str:
     often carried in the text (for example, two different transcript failures
     are both ``LLMError``).
     """
-    if isinstance(exc, AgentError):
+    if isinstance(exc, AgentError) and exc.hint:
         return exc.hint
     if isinstance(exc, KeyboardInterrupt):
         return ("Interrupted. Completed iterations are preserved; resume with "

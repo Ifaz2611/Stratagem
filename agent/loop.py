@@ -25,6 +25,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from agent import env as envmod
 from agent import llm, validate
@@ -37,6 +38,9 @@ from agent.strategy_cache import StrategyCache
 from agent.tuning import HyperparameterTuner, TuningDecision
 from fuzzer.campaign import Campaign, MAX_EXAMPLES_PER_ITERATION
 from fuzzer.features import PRODUCTIONS
+from fuzzer.log import get_logger
+
+logger = get_logger("loop")
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PROMPTS_ROOT = REPO_ROOT / "agent" / "prompts"
@@ -199,6 +203,53 @@ class Loop:
     out: Path = field(init=False)
 
     def __post_init__(self) -> None:
+        self._validate_config()
+        self.progress_mode = normalize_mode(self.progress_mode)
+        self.status_mode = normalize_mode(self.status_mode)
+        self.budget = Budget(self.max_iterations, self.max_usd)
+        self.out = REPO_ROOT / "runs" / self.run_id
+        self.transcript = self.out / "transcript"
+        self.transcript.mkdir(parents=True, exist_ok=True)
+        # Created before any fallible setup so a resume/configuration failure
+        # also leaves a debug trail.
+        self.debug_log: DebugLog | None = (
+            DebugLog(self.out / "debug.jsonl") if self.debug else None)
+        self._status = RunStatus(self.run_id, self.max_iterations,
+                                 mode=self.progress_mode,
+                                 status_mode=self.status_mode)
+        self._init_prompts()
+        self.directives = self._load_directives()
+        self.union_diagnostics: set[str] = set()
+        self.union_productions: set[str] = set()
+        from fuzzer.targets import get_target
+        self.target_obj = get_target(self.target)
+        self.system = (self.prompts / "system.md").read_text(encoding="utf-8")
+
+        self._init_harness()
+        self._last_gate_failures = 0
+        self._last_source_kind = "llm"
+        self._last_ensemble: dict | None = None
+
+        self._init_enhancements()
+
+        # Restore before building the backends: a resumed replay must start at
+        # the first call the resumed iteration actually owns, not at call-1.
+        if self.resume_from:
+            self._require_resume_artifacts()
+            self._restore_budget()
+            self._restore_feedback_unions()
+
+        # Call directories are numbered independently of budget.calls, which
+        # counts successful calls only. A failed call leaves a directory with
+        # no response.json, and numbering from budget.calls alone would reuse
+        # that number and overwrite the record of the failure.
+        self._call_seq = (max(self.budget.calls, self._last_call_number())
+                          if self.resume_from else 0)
+
+        self._init_backends()
+
+    def _validate_config(self) -> None:
+        """Validate constructor arguments and caps."""
         if not 1 <= self.max_examples <= MAX_EXAMPLES_PER_ITERATION:
             raise ValueError(
                 f"max_examples must be 1..{MAX_EXAMPLES_PER_ITERATION}, "
@@ -223,19 +274,9 @@ class Loop:
         if self.max_corpus_entries is not None and self.max_corpus_entries < 1:
             raise ValueError(
                 f"max_corpus_entries must be >= 1, got {self.max_corpus_entries}")
-        self.progress_mode = normalize_mode(self.progress_mode)
-        self.status_mode = normalize_mode(self.status_mode)
-        self.budget = Budget(self.max_iterations, self.max_usd)
-        self.out = REPO_ROOT / "runs" / self.run_id
-        self.transcript = self.out / "transcript"
-        self.transcript.mkdir(parents=True, exist_ok=True)
-        # Created before any fallible setup so a resume/configuration failure
-        # also leaves a debug trail.
-        self.debug_log: DebugLog | None = (
-            DebugLog(self.out / "debug.jsonl") if self.debug else None)
-        self._status = RunStatus(self.run_id, self.max_iterations,
-                                 mode=self.progress_mode,
-                                 status_mode=self.status_mode)
+
+    def _init_prompts(self) -> None:
+        """Initialize prompt manager, active prompt version, and optional A/B tester."""
         from agent.prompt_manager import PromptManager, PromptABTester, PromptVersion
         self.prompt_manager = PromptManager(PROMPTS_ROOT)
         try:
@@ -253,17 +294,8 @@ class Loop:
             if len(variants) >= 2:
                 self.ab_tester = PromptABTester(variants=variants, manager=self.prompt_manager)
 
-        self.directives = self._load_directives()
-        self.union_diagnostics: set[str] = set()
-        self.union_productions: set[str] = set()
-        from fuzzer.targets import get_target
-        self.target_obj = get_target(self.target)
-        self.system = (self.prompts / "system.md").read_text(encoding="utf-8")
-
-        # A generated harness is an alternative measurement instrument for the
-        # target. Resolve it before any campaign can run; if only the source
-        # exists attempts a compile, and if that fails the target's reference
-        # runner remains in place rather than the run dying at the first input.
+    def _init_harness(self) -> None:
+        """Resolve or build generated harness when requested."""
         if self.use_generated_harness:
             from agent.harness_gen import (build_generated_harness,
                                            find_generated_harness)
@@ -272,15 +304,12 @@ class Loop:
                 generated = build_generated_harness(self.target_obj)
             if generated is not None:
                 self.target_obj.harness_binary = generated
-                print(f"    [harness] using generated binary {generated}")
+                logger.tag("harness", f"using generated binary {generated}")
             else:
-                print("    [harness] no generated harness found for "
-                      f"'{self.target}'; falling back to the reference runner")
+                logger.tag("harness", f"no generated harness found for '{self.target}'; falling back to the reference runner")
 
-        self._last_gate_failures = 0
-        self._last_source_kind = "llm"
-        self._last_ensemble: dict | None = None
-
+    def _init_enhancements(self) -> None:
+        """Initialize strategy cache, few-shot library, and tuner."""
         self.cache = None
         if self.use_strategy_cache:
             from agent.strategy_cache import DEFAULT_CACHE_DIR
@@ -298,62 +327,41 @@ class Loop:
                 self.tuner = HyperparameterTuner.load(
                     state, max_examples=self.max_examples,
                     directives=self.directives)
-                print(f"    [tune] restored state from {state}")
+                logger.tag("tune", f"restored state from {state}")
             else:
                 self.tuner = HyperparameterTuner(
                     max_examples=self.max_examples,
                     directives=self.directives,
                     state_path=state)
 
-        # Restore before building the backends: a resumed replay must start at
-        # the first call the resumed iteration actually owns, not at call-1.
-        if self.resume_from:
-            self._require_resume_artifacts()
-            self._restore_budget()
-            self._restore_feedback_unions()
-
-        # Call directories are numbered independently of budget.calls, which
-        # counts successful calls only. A failed call leaves a directory with
-        # no response.json, and numbering from budget.calls alone would reuse
-        # that number and overwrite the record of the failure.
-        self._call_seq = (max(self.budget.calls, self._last_call_number())
-                          if self.resume_from else 0)
-
-        def mk(model):
-            kw = {}
-            if model:
-                kw["model"] = model
-            if self.base_url and self.backend_kind in ("openai", "api"):
-                kw["base_url"] = self.base_url
-            if self.backend_kind == "replay":
-                # Resume at the first recorded call of the resumed iteration,
-                # not at the end of the transcript: the loop will ask for that
-                # iteration's calls again. New calls are written after the
-                # existing directories, so nothing is overwritten.
-                kw["start"] = (sum(self._calls_per_iteration().get(i, 0)
-                                   for i in range(self.resume_from))
-                               if self.resume_from else 0)
-            fallback_list = [f.strip() for f in re.split(r"[,;\s]+", self.fallbacks) if f.strip()] if self.fallbacks else None
-            return llm.make_backend(self.backend_kind,
-                                    transcript_dir=self.transcript,
-                                    fallbacks=fallback_list,
-                                    circuit_breaker=self.circuit_breaker,
-                                    **kw)
-
+    def _build_backend(self, model: str | None = None) -> Any:
+        """Factory for creating LLM backends with configured parameters."""
+        kw: dict[str, Any] = {}
+        if model:
+            kw["model"] = model
+        if self.base_url and self.backend_kind in ("openai", "api"):
+            kw["base_url"] = self.base_url
         if self.backend_kind == "replay":
-            # One shared instance: replay consumes recorded calls in order, so
-            # two instances would each start from call-1 and desynchronise.
-            self.backend = mk(None)
+            kw["start"] = (sum(self._calls_per_iteration().get(i, 0)
+                               for i in range(self.resume_from))
+                           if self.resume_from else 0)
+        fallback_list = [f.strip() for f in re.split(r"[,;\s]+", self.fallbacks) if f.strip()] if self.fallbacks else None
+        return llm.make_backend(self.backend_kind,
+                                transcript_dir=self.transcript,
+                                fallbacks=fallback_list,
+                                circuit_breaker=self.circuit_breaker,
+                                **kw)
+
+    def _init_backends(self) -> None:
+        """Instantiate seed, refine, and ensemble backends."""
+        if self.backend_kind == "replay":
+            self.backend = self._build_backend(None)
             self.backend_seed = self.backend_refine = self.backend
         else:
-            self.backend_seed = mk(self.seed_model or self.model)
-            self.backend_refine = mk(self.refine_model or self.model)
+            self.backend_seed = self._build_backend(self.seed_model or self.model)
+            self.backend_refine = self._build_backend(self.refine_model or self.model)
             self.backend = self.backend_refine
 
-        # Build one backend per ensemble member. A model list is the normal
-        # case; ensemble_candidates > 1 with no list samples the same model
-        # several times, which is still useful for variance reduction but is
-        # not a multi-model ensemble.
         models = [m.strip() for m in re.split(r"[,;\s]+", self.ensemble_models or "")
                   if m.strip()]
         self.ensemble_models_list = models
@@ -361,15 +369,14 @@ class Loop:
         count = max(self.ensemble_candidates, len(models))
         if count > 1:
             if self.backend_kind == "replay":
-                print("    [ensemble] disabled: replay reproduces a recorded "
-                      "call sequence and cannot add candidates")
+                logger.tag("ensemble", "disabled: replay reproduces a recorded call sequence and cannot add candidates")
             else:
                 for i in range(count):
                     chosen = models[i % len(models)] if models else (
                         self.seed_model or self.model)
-                    self.ensemble_backends.append(mk(chosen))
-                print(f"    [ensemble] {count} candidate(s), models="
-                      f"{', '.join(models) if models else '(backend default)'}")
+                    self.ensemble_backends.append(self._build_backend(chosen))
+                model_str = ', '.join(models) if models else '(backend default)'
+                logger.tag("ensemble", f"{count} candidate(s), models={model_str}")
 
     # ----------------------------------------------------------------- resume
     @property
@@ -460,7 +467,7 @@ class Loop:
         d = self.out / "iterations" / f"iter-{it - 1}"
         source = (d / "strategy.py").read_text(encoding="utf-8")
         summary = json.loads((d / "summary.json").read_text(encoding="utf-8"))
-        results = [json.loads(l) for l in (d / "results.jsonl").read_text(encoding="utf-8").splitlines()]
+        results = [json.loads(line) for line in (d / "results.jsonl").read_text(encoding="utf-8").splitlines()]
         return source, summary, results
 
     def _last_call_number(self) -> int:
@@ -551,7 +558,8 @@ class Loop:
             f = self.out / "iterations" / f"iter-{i}" / "summary.json"
             if not f.exists():
                 continue
-            s = json.loads(f.read_text(encoding="utf-8")); st = s["structure"]
+            s = json.loads(f.read_text(encoding="utf-8"))
+            st = s["structure"]
             rows.append({
                 "iteration": i, "strategy": f"gen_iter{i}",
                 "acceptance_rate": s["acceptance_rate"],
@@ -579,7 +587,7 @@ class Loop:
         if self.debug_log is not None:
             self.debug_log.event(event, run_id=self.run_id, **fields)
 
-    def _call(self, user: str, tag: str, backend=None,
+    def _call(self, user: str, tag: str, backend: Any = None,
               iteration: int | None = None) -> llm.LLMResponse:
         self._call_seq += 1
         n = self._call_seq
@@ -627,6 +635,43 @@ class Loop:
                     model=r.model, backend=r.backend)
         return r
 
+    # ---------------------------------------------------------------- formatting
+    @staticmethod
+    def _format_slowest(results: list[dict]) -> str:
+        slowest = sorted(results, key=lambda r: -r["dur_ms"])[:3]
+        return "\n".join(
+            f"{r['dur_ms']:8.1f} ms  len={r['len']:<6} depth={r['structure']['max_depth']:<3} {r['outcome']}"
+            for r in slowest) or "(none)"
+
+    @staticmethod
+    def _format_crashes(summary: dict) -> str:
+        if summary.get("crash_groups"):
+            return "### Crashes found\n\n```\n" + "\n".join(
+                f"{sig}  x{b['count']}  {b['label']}"
+                for sig, b in summary["crash_groups"].items()) + "\n```\n\n" + (
+                "Keep whatever produced these and push harder on the same area.")
+        return ("### Crashes found\n\nNone yet. Sanitizers are active and a "
+                "known real bug is detected by this pipeline, so the "
+                "absence is real, not a detection failure.")
+
+    @staticmethod
+    def _format_boundaries(boundaries: dict) -> str:
+        return "\n".join(
+            f"{k:20} max={v.get('max', 0):<8} p90={v.get('p90', 0):<8} "
+            f"p50={v.get('p50', 0):<8} distinct values={v.get('distinct', 0)}"
+            for k, v in boundaries.items()) or "(not measured)"
+
+    @staticmethod
+    def _format_buckets(buckets: dict) -> str:
+        return "\n".join(
+            f"{b:14} share={e['share']:6.1%}  acceptance={e['acceptance_rate']:6.1%}  n={e['n']}"
+            for b, e in sorted(buckets.items())) or "(not measured)"
+
+    @staticmethod
+    def _format_diagnostics(summary: dict) -> str:
+        return "\n".join(f"{c:5d}  {t}" for t, c in
+                         list(summary.get("diagnostic_templates", {}).items())[:20]) or "(none)"
+
     # ---------------------------------------------------------------- prompts
     def _seed_prompt(self) -> str:
         tpl = (self.prompts / "seed.md").read_text(encoding="utf-8")
@@ -641,45 +686,23 @@ class Loop:
                        directive_override: str | None = None) -> str:
         tpl = (self.prompts / "refine.md").read_text(encoding="utf-8")
         st = summary["structure"]
-        slowest = sorted(results, key=lambda r: -r["dur_ms"])[:3]
-        slow_txt = "\n".join(
-            f"{r['dur_ms']:8.1f} ms  len={r['len']:<6} depth={r['structure']['max_depth']:<3} {r['outcome']}"
-            for r in slowest) or "(none)"
-
-        if summary["crash_groups"]:
-            crash_txt = "### Crashes found\n\n```\n" + "\n".join(
-                f"{sig}  x{b['count']}  {b['label']}"
-                for sig, b in summary["crash_groups"].items()) + "\n```\n\n" + (
-                "Keep whatever produced these and push harder on the same area.")
-        else:
-            crash_txt = ("### Crashes found\n\nNone yet. Sanitizers are active and a "
-                         "known real bug is detected by this pipeline, so the "
-                         "absence is real, not a detection failure.")
-
-        diag = "\n".join(f"{c:5d}  {t}" for t, c in
-                         list(summary["diagnostic_templates"].items())[:20]) or "(none)"
+        slow_txt = self._format_slowest(results)
+        crash_txt = self._format_crashes(summary)
+        diag = self._format_diagnostics(summary)
 
         # Marginal contribution: what this iteration found that no earlier one
         # did. Scoring absolute per-iteration counts rewards re-covering old
         # ground; FunFuzz uses marginal coverage as fitness for this reason.
-        this_diags = set(summary["diagnostic_templates"])
-        this_prods = set(st["hit"])
+        this_diags = set(summary.get("diagnostic_templates", {}))
+        this_prods = set(st.get("hit", {}))
         new_diags = sorted(this_diags - self.union_diagnostics)
         new_prods = sorted(this_prods - self.union_productions)
         self.union_diagnostics |= this_diags
         self.union_productions |= this_prods
         never_produced = [p for p in PRODUCTIONS if p not in self.union_productions]
 
-        bd = st.get("boundaries", {})
-        bound_txt = "\n".join(
-            f"{k:20} max={v.get('max', 0):<8} p90={v.get('p90', 0):<8} "
-            f"p50={v.get('p50', 0):<8} distinct values={v.get('distinct', 0)}"
-            for k, v in bd.items()) or "(not measured)"
-
-        bk = summary.get("buckets", {})
-        bucket_txt = "\n".join(
-            f"{b:14} share={e['share']:6.1%}  acceptance={e['acceptance_rate']:6.1%}  n={e['n']}"
-            for b, e in sorted(bk.items())) or "(not measured)"
+        bound_txt = self._format_boundaries(st.get("boundaries", {}))
+        bucket_txt = self._format_buckets(summary.get("buckets", {}))
 
         directive = (directive_override
                      or (self.directives[(it - 1) % len(self.directives)]
@@ -736,7 +759,7 @@ class Loop:
         return self._obtain_single(it, prompt, tag, name, dest, backend, repairs)
 
     def _obtain_single(self, it: int, prompt: str, tag: str, name: str,
-                       dest: Path, backend, max_repairs: int
+                       dest: Path, backend: Any, max_repairs: int
                        ) -> tuple[str, str] | None:
         """One model's candidate: call, validate, repair up to `max_repairs`."""
         user = prompt
@@ -1043,211 +1066,196 @@ class Loop:
             if self.debug_log is not None:
                 self.debug_log.close()
 
-    def _run(self) -> dict:
-        self._status.start()
-        self._debug("run_started", backend=self.backend_kind,
-                    target=self.target, max_iterations=self.max_iterations,
-                    max_examples=self.max_examples, max_usd=self.max_usd,
-                    prompt_set=self.prompt_set,
-                    resume_from=self.resume_from)
-        stopped_early: str | None = None
-        iterations: list[dict] = self._prior_iterations()
-        prev_source = ""
-        prev_summary: dict | None = None
-        prev_results: list[dict] = []
-        if self.resume_from:
-            prev_source, prev_summary, prev_results = self._load_prev(self.resume_from)
+    def _prepare_iteration_prompt(
+        self,
+        it: int,
+        decision: TuningDecision,
+        prev_source: str,
+        prev_summary: dict | None,
+        prev_results: list[dict],
+        idir: Path,
+    ) -> tuple[str, str]:
+        """Format seed or refine prompt with directives and optional few-shot examples."""
+        if it == 0:
+            prompt, tag = self._seed_prompt(), "seed"
+        else:
+            prompt = self._refine_prompt(
+                it, prev_source, prev_summary or {}, prev_results,
+                directive_override=decision.directive)
+            tag = "refine"
 
-        for it in range(self.resume_from, self.max_iterations):
-            print(f"\n=== iteration {it} ===")
-            if self.budget.exhausted:
-                print(f"    budget exhausted (${self.budget.cost_usd:.2f}); stopping")
-                print("      hint: resume the completed iterations later with "
-                      f"--resume-from {it}")
-                self._debug("budget_exhausted", iteration=it,
-                            spent=self.budget.cost_usd,
-                            max_usd=self.budget.max_usd)
-                stopped_early = "budget exhausted"
-                break
-            self._status.iteration_started(it)
-            self._debug("iteration_started", iteration=it,
-                        resume=bool(self.resume_from))
+        # Few-shot examples are appended after the template is rendered so
+        # both prompt sets (which do not contain a placeholder) get them.
+        if self.fewshot is not None:
+            block = self.fewshot.render(
+                self.target_obj, exclude_run=self.run_id,
+                exclude_iteration=it)
+            if block:
+                prompt = prompt + "\n\n---\n\n" + block
+                (idir / "few_shot.md").write_text(block, encoding="utf-8")
+                logger.tag("few-shot", f"appended {len(block)} chars from earlier runs")
+        return prompt, tag
 
-            # Per-iteration provenance. These are read when the iteration row
-            # is written, so a cache hit or ensemble must not bleed into the
-            # next iteration's row.
-            self._last_gate_failures = 0
-            self._last_source_kind = "llm"
-            self._last_ensemble = None
+    def _acquire_iteration_strategy(
+        self,
+        it: int,
+        prompt: str,
+        tag: str,
+        decision: TuningDecision,
+    ) -> tuple[tuple[str, str] | None, str | None]:
+        """Obtain a strategy via cache or LLM generation/repairs."""
+        got = None
+        if it == 0 and self.cache is not None:
+            got = self._try_strategy_cache(it)
+        if got is None:
+            try:
+                got = self._obtain_strategy(it, prompt, tag,
+                                            max_repairs=decision.repairs)
+            except llm.LLMError as exc:
+                logger.tag("llm", f"FAILED: {exc}")
+                logger.hint(explain_exception(exc))
+                self._debug("llm_failed", iteration=it,
+                            error=f"{type(exc).__name__}: {exc}",
+                            spent=self.budget.cost_usd)
+                if getattr(exc, "usage_limit", False):
+                    logger.info(
+                        f"    the backend refused on an account limit, not "
+                        f"a budget one: ${self.budget.cost_usd:.2f} of "
+                        f"${self.max_usd:.2f} is spent. Resume with "
+                        f"--resume-from {it} once the limit window has "
+                        f"reset.")
+                logger.info("    stopping early; completed iterations are preserved")
+                return None, f"{type(exc).__name__}: {exc}"
 
-            if self.tuner is not None:
-                decision = self.tuner.decide(it)
-            else:
-                decision = TuningDecision(examples=self.max_examples,
-                                          repairs=MAX_REPAIRS,
-                                          directive=None, reason="fixed")
-            examples = max(1, min(self.max_examples, decision.examples))
+        if got is None:
+            logger.tag("gate", "could not obtain a usable strategy; stopping")
+            logger.hint(
+                f"inspect the gate failures with `python -m agent.debug --run-id {self.run_id} --transcript`")
+            self._debug("no_strategy", iteration=it,
+                        gate_failures=self._last_gate_failures)
+            return None, "validation gate could not produce a usable strategy"
 
-            if it == 0:
-                prompt, tag = self._seed_prompt(), "seed"
-            else:
-                prompt = self._refine_prompt(
-                    it, prev_source, prev_summary, prev_results,
-                    directive_override=decision.directive)
-                tag = "refine"
+        return got, None
 
-            idir = self.out / "iterations" / f"iter-{it}"
-            idir.mkdir(parents=True, exist_ok=True)
-
-            # Few-shot examples are appended after the template is rendered so
-            # both prompt sets (which do not contain a placeholder) get them.
-            if self.fewshot is not None:
-                block = self.fewshot.render(
-                    self.target_obj, exclude_run=self.run_id,
-                    exclude_iteration=it)
-                if block:
-                    prompt = prompt + "\n\n---\n\n" + block
-                    (idir / "few_shot.md").write_text(block, encoding="utf-8")
-                    print(f"    [few-shot] appended {len(block)} chars "
-                          f"from earlier runs")
-
-            got = None
-            if it == 0 and self.cache is not None:
-                got = self._try_strategy_cache(it)
-            if got is None:
-                try:
-                    got = self._obtain_strategy(it, prompt, tag,
-                                                max_repairs=decision.repairs)
-                except llm.LLMError as exc:
-                    # A backend failure must not discard the iterations that
-                    # already succeeded. Stop the loop, but fall through to
-                    # writing the summary and iteration log for the work
-                    # completed so far.
-                    print(f"    [llm] FAILED: {exc}")
-                    print(f"      hint: {explain_exception(exc)}")
-                    self._debug("llm_failed", iteration=it,
-                                error=f"{type(exc).__name__}: {exc}",
-                                spent=self.budget.cost_usd)
-                    if getattr(exc, "usage_limit", False):
-                        print(f"    the backend refused on an account limit, not "
-                              f"a budget one: ${self.budget.cost_usd:.2f} of "
-                              f"${self.max_usd:.2f} is spent. Resume with "
-                              f"--resume-from {it} once the limit window has "
-                              f"reset.")
-                    print("    stopping early; completed iterations are preserved")
-                    stopped_early = f"{type(exc).__name__}: {exc}"
-                    break
-            if got is None:
-                print("    [gate] could not obtain a usable strategy; stopping")
-                print("      hint: inspect the gate failures with "
-                      f"`python -m agent.debug --run-id {self.run_id} "
-                      "--transcript`")
-                self._debug("no_strategy", iteration=it,
-                            gate_failures=self._last_gate_failures)
-                stopped_early = "validation gate could not produce a usable strategy"
-                break
-            name, source = got
-            source_kind = self._last_source_kind
-
+    def _execute_iteration_campaign(
+        self,
+        it: int,
+        prompt: str,
+        tag: str,
+        name: str,
+        source: str,
+        examples: int,
+        decision: TuningDecision,
+        idir: Path,
+    ) -> tuple[str, str, dict, bool, str | None]:
+        """Execute campaign measurement and repair if it crashes at full size."""
+        logger.tag("run", f"{examples} examples ...")
+        self._status.phase("campaign")
+        self._debug("campaign_started", iteration=it, strategy=name,
+                    examples=examples, target=self.target)
+        campaign_failed = False
+        try:
+            summary = Campaign(
+                name, examples, idir, mode="survey",
+                target=self.target,
+                progress=self.progress_mode,
+                use_result_cache=self.use_result_cache,
+                result_cache_dir=self.result_cache_dir,
+                max_corpus_entries=self.max_corpus_entries,
+            ).run()
+        except Exception as exc:
+            campaign_failed = True
+            logger.tag("run", f"campaign failed: {type(exc).__name__}: {exc}")
+            logger.hint(explain_exception(exc))
+            self._debug("campaign_failed", iteration=it, strategy=name,
+                        error=f"{type(exc).__name__}: {exc}")
+            repaired = self._repair_campaign(
+                it, prompt, tag, name, exc, max_repairs=decision.repairs,
+                examples=examples)
+            if repaired is None:
+                return name, source, {}, True, f"campaign failed: {type(exc).__name__}: {exc}"
+            name, source, summary = repaired
             (idir / "strategy.py").write_text(source, encoding="utf-8")
 
-            print(f"    [run] {examples} examples ...")
-            self._status.phase("campaign")
-            self._debug("campaign_started", iteration=it, strategy=name,
-                        examples=examples, target=self.target)
-            campaign_failed = False
-            try:
-                summary = Campaign(
-                    name, examples, idir, mode="survey",
-                    target=self.target,
-                    progress=self.progress_mode,
-                    use_result_cache=self.use_result_cache,
-                    result_cache_dir=self.result_cache_dir,
-                    max_corpus_entries=self.max_corpus_entries,
-                ).run()
-            except Exception as exc:
-                # The validation gate draws a few dozen documents, so a branch
-                # it never took can still fail at 500. A strategy that dies
-                # here has already been paid for, so spend a repair on the
-                # traceback rather than losing the iteration.
-                campaign_failed = True
-                print(f"    [run] campaign failed: {type(exc).__name__}: {exc}")
-                print(f"      hint: {explain_exception(exc)}")
-                self._debug("campaign_failed", iteration=it, strategy=name,
-                            error=f"{type(exc).__name__}: {exc}")
-                repaired = self._repair_campaign(
-                    it, prompt, tag, name, exc, max_repairs=decision.repairs,
-                    examples=examples)
-                if repaired is None:
-                    stopped_early = f"campaign failed: {type(exc).__name__}: {exc}"
-                    break
-                name, source, summary = repaired
-                (idir / "strategy.py").write_text(source, encoding="utf-8")
-            st = summary["structure"]
-            print(f"    accept={summary['acceptance_rate']:.1%} "
-                  f"prod={st['productions_hit']}/{st['productions_total']} "
-                  f"depth<={st['max_depth_seen']} "
-                  f"diag={summary['distinct_diagnostic_templates']} "
-                  f"crashes={summary['crash_count']}")
-            self._status.iteration_finished(
-                it,
-                acceptance=summary["acceptance_rate"],
-                productions=f"{st['productions_hit']}/{st['productions_total']}",
-                crashes=summary["crash_count"],
+        return name, source, summary, campaign_failed, None
+
+    def _record_iteration_metrics(
+        self,
+        it: int,
+        name: str,
+        source: str,
+        source_kind: str,
+        examples: int,
+        summary: dict,
+        campaign_failed: bool,
+        decision: TuningDecision,
+        idir: Path,
+        iterations: list[dict],
+    ) -> None:
+        """Update metrics, telemetry, and strategy cache for a completed iteration."""
+        st = summary["structure"]
+        logger.tag(
+            "run",
+            f"accept={summary['acceptance_rate']:.1%} "
+            f"prod={st['productions_hit']}/{st['productions_total']} "
+            f"depth<={st['max_depth_seen']} "
+            f"diag={summary['distinct_diagnostic_templates']} "
+            f"crashes={summary['crash_count']}",
+        )
+        self._status.iteration_finished(
+            it,
+            acceptance=summary["acceptance_rate"],
+            productions=f"{st['productions_hit']}/{st['productions_total']}",
+            crashes=summary["crash_count"],
+            cost_usd=self.budget.cost_usd,
+        )
+        self._debug(
+            "iteration_finished", iteration=it, strategy=name,
+            examples=examples, acceptance=summary["acceptance_rate"],
+            productions=st["productions_hit"],
+            productions_total=st["productions_total"],
+            max_depth=st["max_depth_seen"],
+            crashes=summary["crash_count"],
+            cost_usd=round(self.budget.cost_usd, 4),
+            source=source_kind,
+        )
+
+        if self.cache is not None:
+            self.cache.store(source, self.target_obj, summary, self.run_id, it)
+
+        new_diags = set(summary.get("diagnostic_templates", {})) - self.union_diagnostics
+        new_prods = set(st.get("hit", {})) - self.union_productions
+        iterations.append({
+            "iteration": it, "strategy": name,
+            "examples": examples,
+            "source": source_kind,
+            "acceptance_rate": summary["acceptance_rate"],
+            "productions_hit": st["productions_hit"],
+            "productions_total": st["productions_total"],
+            "productions_missing": st["missing"],
+            "max_depth": st["max_depth_seen"],
+            "distinct_diagnostic_templates": summary["distinct_diagnostic_templates"],
+            "crash_count": summary["crash_count"],
+            "crash_groups": list(summary["crash_groups"].keys()),
+            "cost_usd_cumulative": round(self.budget.cost_usd, 4),
+            "tuning": decision.to_json(),
+            "gate_failures": self._last_gate_failures,
+            "ensemble": bool(self._last_ensemble),
+        })
+        if self.tuner is not None:
+            self.tuner.observe(
+                it, examples=examples,
+                new_productions=len(new_prods),
+                new_diagnostics=len(new_diags),
+                crash_groups=len(summary["crash_groups"]),
+                gate_failures=self._last_gate_failures,
+                campaign_failed=campaign_failed,
                 cost_usd=self.budget.cost_usd,
             )
-            self._debug("iteration_finished", iteration=it, strategy=name,
-                        examples=examples, acceptance=summary["acceptance_rate"],
-                        productions=st["productions_hit"],
-                        productions_total=st["productions_total"],
-                        max_depth=st["max_depth_seen"],
-                        crashes=summary["crash_count"],
-                        cost_usd=round(self.budget.cost_usd, 4),
-                        source=source_kind)
 
-            # Persist this iteration's strategy for reuse by later runs. It is
-            # only cached after it ran, so a cached entry always has measured
-            # results attached and a score to rank it by.
-            if self.cache is not None:
-                self.cache.store(source, self.target_obj, summary,
-                                 self.run_id, it)
-
-            results = [json.loads(l) for l in (idir / "results.jsonl").read_text(encoding="utf-8").splitlines()]
-            new_diags = set(summary.get("diagnostic_templates", {})) - self.union_diagnostics
-            new_prods = set(st.get("hit", {})) - self.union_productions
-            iterations.append({
-                "iteration": it, "strategy": name,
-                "examples": examples,
-                "source": source_kind,
-                "acceptance_rate": summary["acceptance_rate"],
-                "productions_hit": st["productions_hit"],
-                "productions_total": st["productions_total"],
-                "productions_missing": st["missing"],
-                "max_depth": st["max_depth_seen"],
-                "distinct_diagnostic_templates": summary["distinct_diagnostic_templates"],
-                "crash_count": summary["crash_count"],
-                "crash_groups": list(summary["crash_groups"].keys()),
-                "cost_usd_cumulative": round(self.budget.cost_usd, 4),
-                "tuning": decision.to_json(),
-                "gate_failures": self._last_gate_failures,
-                "ensemble": bool(self._last_ensemble),
-            })
-            if self.tuner is not None:
-                self.tuner.observe(
-                    it, examples=examples,
-                    new_productions=len(new_prods),
-                    new_diagnostics=len(new_diags),
-                    crash_groups=len(summary["crash_groups"]),
-                    gate_failures=self._last_gate_failures,
-                    campaign_failed=campaign_failed,
-                    cost_usd=self.budget.cost_usd,
-                )
-            prev_source, prev_summary, prev_results = source, summary, results
-
-        self._debug("run_finished", cost_usd=round(self.budget.cost_usd, 4),
-                    llm_calls=self.budget.calls,
-                    iterations=len(iterations), stopped_early=stopped_early)
-        features = {
+    def _build_features_summary(self) -> dict[str, Any]:
+        """Collate status of agent and harness feature flags."""
+        return {
             "strategy_cache": self.cache.stats() if self.cache is not None else {"enabled": False},
             "few_shot": self.fewshot.stats() if self.fewshot is not None else {"enabled": False},
             "autotune": self.tuner.to_json() if self.tuner is not None else {"enabled": False},
@@ -1264,7 +1272,10 @@ class Loop:
                 "generated": bool(self.use_generated_harness),
             },
         }
-        final = {
+
+    def _build_run_summary(self, iterations: list[dict], stopped_early: str | None) -> dict[str, Any]:
+        """Construct the complete run summary structure."""
+        return {
             "run_id": self.run_id,
             "backend": self.backend_kind,
             "model": self.model or "(backend default)",
@@ -1279,8 +1290,83 @@ class Loop:
             "cost_cap_enforced": self.cost_cap_enforced,
             "stopped_early": stopped_early,
             "resumed_from": self.resume_from or None,
-            "features": features,
+            "features": self._build_features_summary(),
         }
+
+    def _run(self) -> dict:
+        self._status.start()
+        self._debug("run_started", backend=self.backend_kind,
+                    target=self.target, max_iterations=self.max_iterations,
+                    max_examples=self.max_examples, max_usd=self.max_usd,
+                    prompt_set=self.prompt_set,
+                    resume_from=self.resume_from)
+        stopped_early: str | None = None
+        iterations: list[dict] = self._prior_iterations()
+        prev_source = ""
+        prev_summary: dict | None = None
+        prev_results: list[dict] = []
+        if self.resume_from:
+            prev_source, prev_summary, prev_results = self._load_prev(self.resume_from)
+
+        for it in range(self.resume_from, self.max_iterations):
+            logger.section(f"iteration {it}")
+            if self.budget.exhausted:
+                logger.tag("budget", f"budget exhausted (${self.budget.cost_usd:.2f}); stopping")
+                logger.hint(f"resume the completed iterations later with --resume-from {it}")
+                self._debug("budget_exhausted", iteration=it,
+                            spent=self.budget.cost_usd,
+                            max_usd=self.budget.max_usd)
+                stopped_early = "budget exhausted"
+                break
+            self._status.iteration_started(it)
+            self._debug("iteration_started", iteration=it,
+                        resume=bool(self.resume_from))
+
+            self._last_gate_failures = 0
+            self._last_source_kind = "llm"
+            self._last_ensemble = None
+
+            if self.tuner is not None:
+                decision = self.tuner.decide(it)
+            else:
+                decision = TuningDecision(examples=self.max_examples,
+                                          repairs=MAX_REPAIRS,
+                                          directive=None, reason="fixed")
+            examples = max(1, min(self.max_examples, decision.examples))
+
+            idir = self.out / "iterations" / f"iter-{it}"
+            idir.mkdir(parents=True, exist_ok=True)
+
+            prompt, tag = self._prepare_iteration_prompt(
+                it, decision, prev_source, prev_summary, prev_results, idir)
+
+            got, stop_reason = self._acquire_iteration_strategy(it, prompt, tag, decision)
+            if got is None:
+                stopped_early = stop_reason
+                break
+            name, source = got
+            source_kind = self._last_source_kind
+
+            (idir / "strategy.py").write_text(source, encoding="utf-8")
+
+            name, source, summary, campaign_failed, stop_reason = self._execute_iteration_campaign(
+                it, prompt, tag, name, source, examples, decision, idir)
+            if stop_reason is not None:
+                stopped_early = stop_reason
+                break
+
+            self._record_iteration_metrics(
+                it, name, source, source_kind, examples, summary, campaign_failed,
+                decision, idir, iterations)
+
+            results = [json.loads(line) for line in (idir / "results.jsonl").read_text(encoding="utf-8").splitlines()]
+            prev_source, prev_summary, prev_results = source, summary, results
+
+        self._debug("run_finished", cost_usd=round(self.budget.cost_usd, 4),
+                    llm_calls=self.budget.calls,
+                    iterations=len(iterations), stopped_early=stopped_early)
+
+        final = self._build_run_summary(iterations, stopped_early)
         (self.out / "loop_summary.json").write_text(json.dumps(final, indent=2), encoding="utf-8")
         self._write_log(final)
         return final
@@ -1318,7 +1404,8 @@ class Loop:
         (self.out / "ITERATION_LOG.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def main() -> None:
+def _build_arg_parser() -> argparse.ArgumentParser:
+    """Build CLI argument parser for Stratagem agentic loop."""
     ap = argparse.ArgumentParser(description="Run the Stratagem agentic fuzzing loop.")
     ap.add_argument("--backend", choices=("cli", "openai", "replay"), default=None,
                     help="default comes from LLM_BACKEND in .env, else replay")
@@ -1393,6 +1480,11 @@ def main() -> None:
                           help="directory for harness result cache database")
     grp_perf.add_argument("--max-corpus-entries", type=int, default=None,
                           help="ceiling on in-memory corpus size")
+    return ap
+
+
+def main() -> None:
+    ap = _build_arg_parser()
     a = ap.parse_args()
 
     # .env is read here rather than at import time, so importing the module for

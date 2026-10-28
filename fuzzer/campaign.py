@@ -20,6 +20,7 @@ import signal
 import statistics
 import threading
 import time
+import types
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -432,7 +433,7 @@ class Campaign:
                 try:
                     old_handler = signal.getsignal(signal.SIGALRM)
 
-                    def _deadline(_signum, _frame):
+                    def _deadline(_signum: int, _frame: types.FrameType | None) -> None:
                         raise CampaignWallClockExceeded()
 
                     signal.signal(signal.SIGALRM, _deadline)
@@ -445,7 +446,7 @@ class Campaign:
             try:
                 orig_sigint = signal.getsignal(signal.SIGINT)
 
-                def _handle_sigint(signum, frame):
+                def _handle_sigint(signum: int, frame: types.FrameType | None) -> None:
                     nonlocal interrupted
                     interrupted = True
                     _save_checkpoint(is_interrupted=True)

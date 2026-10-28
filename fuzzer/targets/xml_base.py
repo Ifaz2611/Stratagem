@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 from fuzzer import features
 from fuzzer.targets.base import BaseTarget, REPO_ROOT

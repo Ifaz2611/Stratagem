@@ -21,8 +21,9 @@ from pathlib import Path
 
 from agent import debug as debugmod
 from agent.errors import (AgentError, DebugLog, RunDiagnostics,
-                          explain_exception, format_exception, infer_iteration,
-                          list_runs, validation_hint)
+                          explain_exception, format_error_summary,
+                          format_exception, infer_iteration, list_runs,
+                          standardize_error, validation_hint)
 from agent.llm import LLMError
 from agent.progress import (NullProgress, ProgressBar, RunStatus, StatusLine,
                             format_duration, make_progress, normalize_mode,
@@ -147,6 +148,17 @@ def test_explain_exception_maps_common_failures() -> None:
 
     corrupt = explain_exception(json.JSONDecodeError("bad", "doc", 0))
     expect("corrupt" in corrupt.lower() or "json" in corrupt.lower(), corrupt)
+
+    # Standardized error helpers
+    head, hint = format_error_summary(LLMError("transcript exhausted after 4 calls"))
+    expect("LLMError" in head, head)
+    expect("transcript" in hint.lower(), hint)
+
+    std = standardize_error(ValueError("bad value"), hint="check inputs", context={"key": "val"})
+    expect(isinstance(std, AgentError), "standardized to AgentError")
+    expect(std.hint == "check inputs", std.hint)
+    expect(std.context.get("key") == "val", str(std.context))
+
 
 
 def test_infer_iteration_tolerates_old_transcripts() -> None:

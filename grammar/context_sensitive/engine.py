@@ -10,13 +10,11 @@ Supports properties beyond context-free grammars (Chomsky Type-1):
 from __future__ import annotations
 
 import binascii
-import copy
 import random
 import struct
-from dataclasses import dataclass, field
-from typing import Any, Callable, Sequence
+from typing import Any, Sequence
 
-from grammar.formats.base import Grammar, GrammarSymbol, Production, Rule, SymbolType
+from grammar.formats.base import Grammar, SymbolType
 
 
 class GenerationContext:

@@ -362,8 +362,8 @@ def _build_script(spec: HarnessSpec, source_name: str) -> str:
 class HarnessGenerator:
     """Drive an LLM through generate -> validate -> repair for one target."""
 
-    def __init__(self, backend, transcript_dir: Path | str,
-                 max_repairs: int = DEFAULT_MAX_REPAIRS):
+    def __init__(self, backend: Any, transcript_dir: Path | str,
+                 max_repairs: int = DEFAULT_MAX_REPAIRS) -> None:
         self.backend = backend
         self.transcript_dir = Path(transcript_dir)
         self.max_repairs = max(0, int(max_repairs))
@@ -411,7 +411,6 @@ class HarnessGenerator:
         validation = HarnessValidation(False, "empty", error="no response")
         model = ""
         attempt = 0
-        last_response: llm.LLMResponse | None = None
 
         while attempt <= self.max_repairs:
             attempt += 1
@@ -424,7 +423,6 @@ class HarnessGenerator:
                                        HarnessValidation(False, "transport",
                                                          error=str(exc)),
                                        attempts=attempt, model=model)
-            last_response = response
             model = response.model or model
             self._record(tag, prompt, response)
             code = extract_harness_code(response.text)
@@ -566,7 +564,7 @@ def main() -> None:
     if result.binary_path:
         print(f"binary      : {result.binary_path}")
     elif result.compile_error:
-        print(f"compile     : FAILED")
+        print("compile     : FAILED")
         print(result.compile_error[-1200:])
     raise SystemExit(0 if result.validation.ok else 1)
 

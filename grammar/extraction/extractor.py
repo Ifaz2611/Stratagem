@@ -13,9 +13,9 @@ import ast
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
-from grammar.formats.base import Grammar, GrammarSymbol, Production, Rule, SymbolType
+from grammar.formats.base import Grammar, GrammarSymbol, SymbolType
 
 # Function name prefixes that typically indicate a parser rule
 _PARSE_FUNC_PREFIXES = (

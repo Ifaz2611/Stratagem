@@ -13,6 +13,7 @@ import json
 import tempfile
 import time
 from pathlib import Path
+from typing import Any
 
 from agent.ensemble import Candidate, vote_candidates
 from agent.fewshot import FewShotLibrary
@@ -34,8 +35,8 @@ def check(name: str, cond: bool, detail: str = "") -> None:
         _failed.append(f"{name}{(': ' + detail) if detail else ''}")
 
 
-def _summary(prod=5, total=27, diag=2, acc=0.5, crashes=0,
-             depth=3, examples=50, seconds=0.5) -> dict:
+def _summary(prod: int = 5, total: int = 27, diag: int = 2, acc: float = 0.5, crashes: int = 0,
+             depth: int = 3, examples: int = 50, seconds: float = 0.5) -> dict[str, Any]:
     return {
         "acceptance_rate": acc,
         "distinct_diagnostic_templates": diag,
@@ -255,10 +256,10 @@ def test_circuit_breaker() -> None:
 def test_fallback_backend() -> None:
     from agent.llm import FallbackBackend, LLMError, LLMResponse, AllBackendsFailedError
     class MockB:
-        def __init__(self, name, fail=False):
+        def __init__(self, name: str, fail: bool = False) -> None:
             self.name = name
             self.fail = fail
-        def complete(self, s, u, stream=False, on_chunk=None):
+        def complete(self, s: str, u: str, stream: bool = False, on_chunk: Any = None) -> LLMResponse:
             if self.fail:
                 raise LLMError(f"{self.name} failed")
             return LLMResponse(text=f"{self.name} ok", backend=self.name)

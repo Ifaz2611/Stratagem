@@ -4,7 +4,6 @@ Extracts productions, anomalies, and classification buckets for protocol fuzzing
 """
 from __future__ import annotations
 
-import re
 import struct
 from dataclasses import dataclass, field
 

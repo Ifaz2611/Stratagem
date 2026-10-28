@@ -8,14 +8,12 @@ from __future__ import annotations
 
 from hypothesis import strategies as st
 
+from fuzzer.strategies.common import bytes_to_surrogate
+
 NAME = "mxml_byte_pipeline_probe"
 DESCRIPTION = "explicit UTF-16 BOM, invalid UTF-8, NUL, and encoding-lie inputs"
 
-
-def _raw(data: bytes) -> str:
-    """Carry arbitrary bytes through the str-only strategy interface."""
-    return data.decode("utf-8", "surrogateescape")
-
+_raw = bytes_to_surrogate
 
 _CASES = (
     _raw(b"\xff\xfe<\x00r\x00/\x00>\x00"),

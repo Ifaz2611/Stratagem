@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import Any
 
 # The production vocabulary. Names beginning with "g_" come from the ANTLR
 # grammar; names beginning with "x_" are constructs the grammar cannot express
@@ -433,7 +434,7 @@ def coverage(feature_list: list[Features]) -> dict:
                   else "4-7" if d <= 7 else "8-15" if d <= 15 else "16+")
         hist[bucket] = hist.get(bucket, 0) + 1
 
-    def spread(vals):
+    def spread(vals: list[int | float]) -> dict[str, Any]:
         vals = sorted(vals)
         if not vals:
             return {}

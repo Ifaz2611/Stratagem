@@ -22,7 +22,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from agent.scoring import explain
 from agent.strategy_cache import TargetProfile
@@ -88,7 +88,7 @@ def _excerpt(source: str, limit: int) -> tuple[str, bool]:
     """
     if len(source) <= limit:
         return source, False
-    marker = f"\n# ... [middle omitted: {{n}} chars] ...\n"
+    marker = "\n# ... [middle omitted: {n} chars] ...\n"
     head_budget = max(300, int(limit * 0.35))
     tail_budget = max(300, limit - head_budget - len(marker.format(n=10_000_000)))
     head = source[:head_budget].rstrip()
@@ -132,7 +132,7 @@ class FewShotLibrary:
         self._cache: tuple[tuple[str, str, int], list[StrategyExample]] | None = None
 
     # ---------------------------------------------------------------- scan
-    def _iter_run_summaries(self):
+    def _iter_run_summaries(self) -> Iterator[tuple[Path, dict[str, Any]]]:
         if not self.runs_root.exists():
             return
         for run_dir in sorted(self.runs_root.iterdir()):

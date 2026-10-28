@@ -35,7 +35,7 @@ import os
 import sqlite3
 import time
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
 
 from fuzzer.runner import Outcome, RunResult
 
@@ -97,7 +97,7 @@ class ResultCache:
 
     # --------------------------------------------------------------- lifecycle
     @contextlib.contextmanager
-    def _session(self):
+    def _session(self) -> Iterator[sqlite3.Connection]:
         """A committed transaction on a connection that is always closed."""
         conn = sqlite3.connect(str(self.path), timeout=5.0)
         try:

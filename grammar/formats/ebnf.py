@@ -12,10 +12,8 @@ Supports ISO/IEC 14977 and W3C/standard EBNF notations:
 from __future__ import annotations
 
 import re
-from pathlib import Path
-from typing import Sequence
 
-from grammar.formats.base import Grammar, GrammarSymbol, Rule, SymbolType
+from grammar.formats.base import Grammar, GrammarSymbol, SymbolType
 
 _RE_EBNF_COMMENT = re.compile(r"\(\*.*?\*\)|//.*?$|#.*?$", re.DOTALL | re.MULTILINE)
 _RE_TOKEN = re.compile(

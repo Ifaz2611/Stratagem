@@ -8,11 +8,9 @@
 from __future__ import annotations
 
 import json
-import math
 import tempfile
 from pathlib import Path
 
-from fuzzer import reproducer, runner, significance, triage, visual_report
 from fuzzer.reproducer import (
     DeltaDebugger,
     create_reproducer_bundle,
@@ -26,15 +24,12 @@ from fuzzer.runner import (
     SanitizerType,
     detect_sanitizer,
     get_sanitizer_env,
-    run_one,
 )
 from fuzzer.significance import (
-    SignificanceResult,
     bootstrap_ci_difference,
     cohens_d,
     compare_cells,
     compare_samples,
-    compare_trials,
     evaluate_campaign_progress,
     format_significance_table,
     hedges_g,
@@ -45,14 +40,10 @@ from fuzzer.significance import (
 from fuzzer.targets import get_target
 from fuzzer.triage import (
     BugClusterer,
-    CrashCluster,
     Severity,
     calculate_stack_similarity,
     classify_severity,
-    cluster_crashes,
-    deduplicate_crashes,
     parse_report,
-    triage_summary,
 )
 from fuzzer.visual_report import generate_html_dashboard
 

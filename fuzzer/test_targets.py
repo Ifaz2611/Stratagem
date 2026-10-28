@@ -310,12 +310,45 @@ def test_campaign_with_targets() -> None:
             check(f"campaign/{t_name}_has_outcomes", len(s["outcomes"]) > 0)
 
 
+def test_strategy_common_helpers() -> None:
+    from hypothesis import strategies as st
+    from fuzzer.strategies.common import (
+        bytes_to_surrogate,
+        inject_bom,
+        inject_control_chars,
+        inject_nul,
+        make_mixture_documents,
+        surrogate_to_bytes,
+    )
+
+    raw = b"\xff\xfe\x00\x01test"
+    encoded = bytes_to_surrogate(raw)
+    decoded = surrogate_to_bytes(encoded)
+    check("common/roundtrip_surrogate", decoded == raw)
+
+    nul_res = inject_nul("hello")
+    check("common/inject_nul", nul_res == "hello\x00")
+
+    bom_res = inject_bom("hello")
+    check("common/inject_bom", bom_res == "\ufeffhello")
+
+    ctrl_res = inject_control_chars("hello", chars="\x01\x02")
+    check("common/inject_ctrl", ctrl_res == "hello\x01\x02")
+
+    ctrl_replace = inject_control_chars("prefix: hello", target="prefix: ", chars="\x01")
+    check("common/inject_ctrl_target", ctrl_replace == "prefix: \x01hello")
+
+    mix = make_mixture_documents(st.just("a"), st.just("b"), st.just("c"))
+    check("common/mixture_strategy", mix is not None)
+
+
 def main() -> int:
     test_target_registry()
     test_xml_targets()
     test_json_target()
     test_protocol_targets()
     test_campaign_with_targets()
+    test_strategy_common_helpers()
     print(f"passed={_passed} failed={len(_failed)}")
     for f in _failed:
         print(f"  FAIL {f}")

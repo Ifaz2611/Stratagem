@@ -91,10 +91,10 @@ This document outlines potential improvements and new features for Stratagem, th
 - [x] Resolve Windows compatibility issues
 
 ### Technical Debt
-- [ ] Refactor large functions in loop.py
-- [ ] Improve type hints across codebase
-- [ ] Reduce code duplication in strategy modules
-- [ ] Standardize error handling patterns
-- [ ] Improve logging consistency
+- [x] Refactor large functions in loop.py
+- [x] Improve type hints across codebase
+- [x] Reduce code duplication in strategy modules
+- [x] Standardize error handling patterns
+- [x] Improve logging consistency
 
 ---

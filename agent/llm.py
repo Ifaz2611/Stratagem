@@ -32,6 +32,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
+from agent.errors import AgentError
+
 # Claude Code carries its own tool definitions into every request. Disabling
 # tools cuts the fixed overhead roughly in half (measured: ~26k prompt tokens
 # with tools allowed, ~15k with them off) and makes the cli backend behave more
@@ -103,8 +105,20 @@ def _redact(text: str) -> str:
     return text
 
 
-class LLMError(RuntimeError):
-    pass
+class LLMError(AgentError):
+    """Base error for LLM backend communication or execution failures."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        hint: str = "",
+        context: dict[str, Any] | None = None,
+        cause: BaseException | None = None,
+        usage_limit: bool = False,
+    ):
+        super().__init__(message, hint=hint, context=context, cause=cause)
+        self.usage_limit = usage_limit
 
 
 class CircuitState(str, Enum):
@@ -121,8 +135,20 @@ class CircuitOpenError(LLMError):
 
 class AllBackendsFailedError(LLMError):
     """Raised when every backend in a fallback chain has failed."""
-    def __init__(self, message: str, errors: dict[str, str] | None = None):
-        super().__init__(message)
+
+    def __init__(
+        self,
+        message: str,
+        errors: dict[str, str] | None = None,
+        *,
+        hint: str = "",
+        context: dict[str, Any] | None = None,
+        cause: BaseException | None = None,
+    ):
+        ctx = dict(context or {})
+        if errors:
+            ctx.setdefault("errors", errors)
+        super().__init__(message, hint=hint, context=ctx, cause=cause)
         self.errors = errors or {}
 
 
@@ -765,7 +791,7 @@ class FallbackBackend:
             cb = self.circuit_breakers.get(b_id)
 
             if self.use_circuit_breaker and cb and not cb.allow_request():
-                errors[f"{b_name}({b_model})"] = f"Circuit breaker OPEN"
+                errors[f"{b_name}({b_model})"] = "Circuit breaker OPEN"
                 continue
 
             try:
@@ -819,11 +845,16 @@ class FallbackBackend:
         }
 
 
-def make_backend(kind: str,
-                 transcript_dir: Path | None = None,
-                 fallbacks: list[str | Any] | None = None,
-                 circuit_breaker: bool = False,
-                 **kw):
+BackendType = ClaudeCLIBackend | OpenAICompatBackend | ReplayBackend | FallbackBackend
+
+
+def make_backend(
+    kind: str,
+    transcript_dir: Path | None = None,
+    fallbacks: list[str | Any] | None = None,
+    circuit_breaker: bool = False,
+    **kw: Any,
+) -> BackendType:
     kind = (kind or "replay").lower()
     if kind == "cli":
         primary = ClaudeCLIBackend(**kw)

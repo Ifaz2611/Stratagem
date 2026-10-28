@@ -20,7 +20,7 @@ import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_PROMPTS_DIR = REPO_ROOT / "agent" / "prompts"

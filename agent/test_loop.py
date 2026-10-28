@@ -628,6 +628,17 @@ def test_debug_mode_writes_jsonl_events() -> None:
             expect(expected in names, f"missing event {expected}: {sorted(names)}")
 
 
+def test_loop_arg_parser() -> None:
+    from agent.loop import _build_arg_parser
+    parser = _build_arg_parser()
+    args = parser.parse_args(["--run-id", "test-parse", "-n", "100", "-i", "3"])
+    expect(args.run_id == "test-parse", args.run_id)
+    expect(args.max_examples == 100, str(args.max_examples))
+    expect(args.iterations == 3, str(args.iterations))
+    expect(args.target == "mxml", args.target)
+
+
+
 # --------------------------------------------------------------- standalone
 def _run_all() -> int:
     tests = [(name, fn) for name, fn in sorted(globals().items())

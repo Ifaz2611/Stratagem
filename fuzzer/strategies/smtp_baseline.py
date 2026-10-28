@@ -1,7 +1,14 @@
 """Baseline Hypothesis strategy for SMTP protocol target."""
 from __future__ import annotations
 
+from typing import Any
 from hypothesis import strategies as st
+
+from fuzzer.strategies.common import (
+    inject_control_chars,
+    inject_nul,
+    make_mixture_documents,
+)
 
 NAME = "smtp_baseline"
 DESCRIPTION = "Hypothesis strategy generating SMTP command sessions and mutations (RFC 5321)"
@@ -11,7 +18,7 @@ _USERS = st.sampled_from(["alice", "bob", "postmaster", "admin"])
 
 
 @st.composite
-def _well_formed_smtp(draw):
+def _well_formed_smtp(draw: Any) -> str:
     dom = draw(_DOMAINS)
     u1 = draw(_USERS)
     u2 = draw(_USERS)
@@ -30,7 +37,7 @@ def _well_formed_smtp(draw):
 
 
 @st.composite
-def _near_miss_smtp(draw):
+def _near_miss_smtp(draw: Any) -> str:
     base = draw(_well_formed_smtp())
     kind = draw(st.sampled_from(["bad_verb", "bad_addr", "bare_newline", "no_param"]))
     if kind == "bad_verb":
@@ -45,7 +52,7 @@ def _near_miss_smtp(draw):
 
 
 @st.composite
-def _byte_hostile_smtp(draw):
+def _byte_hostile_smtp(draw: Any) -> str:
     base = draw(_well_formed_smtp())
     kind = draw(st.sampled_from(["long_line", "control", "nul"]))
     if kind == "long_line":
@@ -53,15 +60,11 @@ def _byte_hostile_smtp(draw):
         long_str = "A" * 1200
         return f"NOOP {long_str}\r\n" + base
     elif kind == "control":
-        return base.replace("Hello", "Hello\x01\x02")
+        return inject_control_chars(base, target="Hello", chars="\x01\x02")
     elif kind == "nul":
-        return base + "\x00"
+        return inject_nul(base)
     return base
 
 
 def documents() -> st.SearchStrategy[str]:
-    return st.one_of(
-        st.tuples(st.just("wf"), _well_formed_smtp()).map(lambda t: t[1]),
-        st.tuples(st.just("nm"), _near_miss_smtp()).map(lambda t: t[1]),
-        st.tuples(st.just("bh"), _byte_hostile_smtp()).map(lambda t: t[1]),
-    )
+    return make_mixture_documents(_well_formed_smtp(), _near_miss_smtp(), _byte_hostile_smtp())

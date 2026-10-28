@@ -5,9 +5,8 @@ Parses ANTLR grammar, parser grammar, and lexer grammar files into the unified G
 from __future__ import annotations
 
 import re
-from typing import Sequence
 
-from grammar.formats.base import Grammar, GrammarSymbol, Rule, SymbolType
+from grammar.formats.base import Grammar, GrammarSymbol, SymbolType
 
 _RE_ANTLR_COMMENT = re.compile(r"/\*.*?\*/|//.*?$", re.DOTALL | re.MULTILINE)
 _RE_ANTLR_TOKEN = re.compile(

@@ -19,15 +19,12 @@ import hashlib
 import os
 import subprocess
 import time
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from fuzzer.platform_compat import native_binary
 from fuzzer.runner import (
-    DEFAULT_HARNESS,
     PER_RUN_TIMEOUT_S,
-    SANITIZER_ENV,
     SANITIZER_MARKERS,
     Outcome,
     RunResult,

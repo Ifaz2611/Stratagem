@@ -10,9 +10,8 @@ Supports:
 from __future__ import annotations
 
 import re
-from typing import Sequence
 
-from grammar.formats.base import Grammar, GrammarSymbol, Rule, SymbolType
+from grammar.formats.base import Grammar, GrammarSymbol, SymbolType
 
 _RE_C_COMMENTS = re.compile(r"/\*.*?\*/|//.*?$", re.DOTALL | re.MULTILINE)
 _RE_TOKEN_DECL = re.compile(r"%token\s+([^;\n%]+)")

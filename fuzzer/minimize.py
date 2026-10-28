@@ -22,12 +22,11 @@ cheap.
 from __future__ import annotations
 
 import importlib
-import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from hypothesis import HealthCheck, given, settings
-from hypothesis import strategies as st
 
 from fuzzer import triage
 from fuzzer.campaign import _encode

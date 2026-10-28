@@ -8,34 +8,28 @@
 from __future__ import annotations
 
 import json
-import os
 import tempfile
-import time
 from pathlib import Path
 
 from fuzzer.batching import (
     AdaptiveBatchConfig,
     AdaptiveBatchController,
     BatchMetrics,
-    extract_batch_metrics,
 )
-from fuzzer.campaign import Campaign, CampaignTimeoutStreakExceeded
+from fuzzer.campaign import Campaign
 from fuzzer.corpus import (
-    CORPUS_NAME,
     DISTILLED_CORPUS_NAME,
     CorpusEntry,
     CorpusManager,
     read_corpus,
-    write_corpus,
 )
 from fuzzer.parallel import (
     CampaignTask,
     ParallelCampaignRunner,
     run_parallel_seeds,
-    run_parallel_strategies,
     run_parallel_targets,
 )
-from fuzzer.runner import DEFAULT_HARNESS, Outcome, RunResult, run_one
+from fuzzer.runner import Outcome, RunResult, run_one
 
 _passed = 0
 _failed: list[str] = []
@@ -421,6 +415,25 @@ def test_incremental_persistence() -> None:
         check("persistence/resumed_results_count", len(resumed_lines) == 25)
 
 
+def test_logging_consistency() -> None:
+    import io
+    from fuzzer.log import StratagemLogger, get_logger
+
+    buf = io.StringIO()
+    logger = StratagemLogger("test_logger", stream=buf)
+    logger.tag("test_tag", "sample message")
+    logger.hint("suggested next step")
+    logger.section("Section Header")
+
+    output = buf.getvalue()
+    check("log/tag_format", "    [test_tag] sample message" in output)
+    check("log/hint_format", "      hint: suggested next step" in output)
+    check("log/section_format", "=== Section Header ===" in output)
+
+    cached = get_logger("singleton_check")
+    check("log/get_logger_singleton", cached is get_logger("singleton_check"))
+
+
 def main() -> int:
     print("Running Fuzzer Improvements Test Suite...")
     test_parallel_fuzzing()
@@ -428,6 +441,7 @@ def main() -> int:
     test_corpus_management()
     test_timeout_and_slow_inputs()
     test_incremental_persistence()
+    test_logging_consistency()
 
     print(f"passed={_passed} failed={len(_failed)}")
     for f in _failed:

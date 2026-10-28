@@ -19,7 +19,7 @@ sys.path.insert(0, str(REPO))
 from fuzzer.timeutil import utc_iso  # noqa: E402
 
 
-def cell(vals) -> str:
+def cell(vals: list[float] | list[int]) -> str:
     if not vals:
         return "-"
     m = statistics.mean(vals)
@@ -53,7 +53,7 @@ def main(run_id: str = "loop") -> int:
         "|---|---|---|---|---|---|---|",
     ]
 
-    def row(label, key, cost):
+    def row(label: str, key: str, cost: str) -> str | None:
         v = var.get(key)
         if not v:
             return None

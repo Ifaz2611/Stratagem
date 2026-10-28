@@ -12,13 +12,12 @@ negative, malformed, and stack-stressing input structures:
 """
 from __future__ import annotations
 
-import copy
 import random
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Sequence
 
-from grammar.formats.base import Grammar, GrammarSymbol, Production, Rule, SymbolType
+from grammar.formats.base import Grammar, GrammarSymbol, Rule, SymbolType
 
 
 class MutationType(str, Enum):

@@ -6,6 +6,7 @@ import json
 import re
 import time
 from pathlib import Path
+from typing import Any
 
 from fuzzer.runner import (
     PER_RUN_TIMEOUT_S,
@@ -56,7 +57,7 @@ class JSONTarget(BaseTarget):
     def normalize_diagnostic(self, message: str) -> str:
         return normalize_json(message)
 
-    def analyze_features(self, text: str, payload: bytes = b""):
+    def analyze_features(self, text: str, payload: bytes = b"") -> Any:
         return analyze(text, payload)
 
     def summarize_structure(self, feature_list: list) -> dict:
