@@ -65,22 +65,6 @@ This document outlines potential improvements and new features for Stratagem, th
 - [x] Optimize memory usage for large corpora
 - [x] Implement distributed fuzzing support
 
-## Research & Experimentation
-
-### Novel Strategies
-- [ ] Explore combining agentic generation with traditional mutation fuzzing
-- [ ] Experiment with reinforcement learning for strategy refinement
-- [ ] Investigate symbolic execution integration
-- [ ] Explore cross-target strategy transfer learning
-- [ ] Experiment with adversarial input generation
-
-### Evaluation
-- [ ] Run comparative studies against traditional fuzzers (AFL, libFuzzer)
-- [ ] Measure effectiveness on real-world vulnerabilities
-- [ ] Evaluate cost-effectiveness vs traditional approaches
-- [ ] Study reproducibility across different LLM providers/models
-- [ ] Analyze the impact of prompt engineering on results
-
 ## Backlog
 
 ### Bug Fixes
