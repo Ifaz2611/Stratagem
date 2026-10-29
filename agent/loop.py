@@ -416,18 +416,23 @@ class Loop:
 
         A replay resume re-reads the calls at and after the resume point and
         charges their recorded cost again as it goes, so those calls are
-        counted for numbering but not for spend: charging them here as well
-        would report the same money twice. A live backend is not re-reading
-        anything, so every recorded call there is spend that already happened.
+        skipped here: replay counts them when it re-issues them, and charging
+        them here as well would report the same money and the same calls twice.
+        A live backend is not re-reading anything, so every recorded call there
+        is spend that already happened. Call numbering comes from the
+        directories on disk, so skipping the replayed calls does not reuse a
+        call number.
         """
         calls = self._recorded_calls()
         replay_start = (sum(self._calls_per_iteration().get(i, 0)
                             for i in range(self.resume_from))
                         if self.backend_kind == "replay" else len(calls))
         for i, (f, d) in enumerate(calls):
-            self.budget.calls += 1
             if i >= replay_start:
+                # Replay re-issues these calls, so counting them here and
+                # again in _call() would double llm_calls.
                 continue
+            self.budget.calls += 1
             self.budget.input_tokens += d.get("input_tokens", 0)
             self.budget.output_tokens += d.get("output_tokens", 0)
             self.budget.billable_input += d.get("billable_input", 0)

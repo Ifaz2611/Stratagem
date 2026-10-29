@@ -563,8 +563,13 @@ def test_resume_budget() -> None:
         replay._restore_budget()
         check("resume/replay does not double-charge", replay.budget.cost_usd == 3.0,
               str(replay.budget.cost_usd))
-        check("resume/replay keeps numbering", replay.budget.calls == 3,
+        # Calls from the resumed iteration onward are counted when replay
+        # re-issues them, so restoring them too would double llm_calls.
+        check("resume/replay defers replayed calls", replay.budget.calls == 2,
               str(replay.budget.calls))
+        check("resume/replay keeps numbering",
+              max(replay.budget.calls, replay._last_call_number()) == 3,
+              str(replay._last_call_number()))
 
         # A live backend is not re-reading anything: every recorded call is
         # spend that already happened.

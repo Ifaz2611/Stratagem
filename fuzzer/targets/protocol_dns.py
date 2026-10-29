@@ -80,10 +80,12 @@ class DNSTarget(BaseTarget):
         tx_id, flags, qdcount, ancount, nscount, arcount = struct.unpack("!HHHHHH", payload[:12])
 
         offset = 12
-        seen_ptrs = set()
 
         # Parse question section
         for q_idx in range(qdcount):
+            # Compression targets are scoped to one QNAME: two questions may
+            # legitimately point at the same earlier name.
+            seen_ptrs = set()
             # Parse QNAME
             name_len = 0
             while True:

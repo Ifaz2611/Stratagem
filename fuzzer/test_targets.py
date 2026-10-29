@@ -234,6 +234,18 @@ def test_protocol_targets() -> None:
     r_dns_loop = dns_t.run(loop_dns)
     check("dns/detects_compression_loop", r_dns_loop.outcome == Outcome.CRASH, str(r_dns_loop))
 
+    # Two questions may point at the same earlier name: that is valid DNS
+    # compression, not a loop.
+    shared_ptr_dns = (
+        b"\x12\x34\x01\x00\x00\x03\x00\x00\x00\x00\x00\x00"
+        b"\x07example\x03com\x00\x00\x01\x00\x01"
+        b"\xc0\x0c\x00\x01\x00\x01"
+        b"\xc0\x0c\x00\x01\x00\x01"
+    )
+    r_dns_shared = dns_t.run(shared_ptr_dns)
+    check("dns/shared_compression_target",
+          r_dns_shared.outcome == Outcome.PARSED_CLEAN, str(r_dns_shared))
+
     f_dns = analyze_dns("", valid_dns)
     check("dns/feat_header", "g_dns_header" in f_dns.productions)
     check("dns/feat_query", "g_qr_query" in f_dns.productions)

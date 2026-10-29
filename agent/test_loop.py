@@ -391,6 +391,22 @@ def test_resume_restores_budget_and_feedback() -> None:
                "feedback unions not restored")
 
 
+def test_replay_resume_does_not_precount_replayed_calls() -> None:
+    with loop_env() as (root, _):
+        run_dir = root / "runs" / "resume-replay"
+        _write_recorded_call(run_dir, 1, cost=0.5, iteration=0, tag="seed")
+        _write_recorded_call(run_dir, 2, cost=0.25, iteration=1, tag="refine")
+        _write_iteration(run_dir, 0)
+        lp = make_loop(run_id="resume-replay", backend_kind="replay",
+                       max_iterations=2, resume_from=1)
+        # Call 2 belongs to the iteration about to be replayed, so it is
+        # charged when re-issued rather than restored here.
+        expect(lp.budget.calls == 1, f"calls={lp.budget.calls}")
+        expect(abs(lp.budget.cost_usd - 0.5) < 1e-9,
+               f"cost={lp.budget.cost_usd}")
+        expect(lp._call_seq == 2, f"call numbering: {lp._call_seq}")
+
+
 def test_resume_requires_previous_artifacts() -> None:
     with loop_env():
         try:
