@@ -380,15 +380,21 @@ def test_resume_restores_budget_and_feedback() -> None:
         run_dir = root / "runs" / "resume"
         _write_recorded_call(run_dir, 1, cost=0.5)
         _write_iteration(run_dir, 0)
+        _write_iteration(run_dir, 1)
         lp = make_loop(run_id="resume", backend_kind="replay",
-                       max_iterations=2, resume_from=1)
+                       max_iterations=3, resume_from=2)
         expect(lp.budget.calls == 1, f"calls={lp.budget.calls}")
         expect(abs(lp.budget.cost_usd - 0.5) < 1e-9,
                f"cost={lp.budget.cost_usd}")
         expect(lp._call_seq == 1, f"call numbering: {lp._call_seq}")
-        expect(len(lp._prior_iterations()) == 1, "prior iteration table")
+        expect(len(lp._prior_iterations()) == 2, "prior iteration table")
         expect(len(lp.union_diagnostics) == 3 and len(lp.union_productions) == 5,
                "feedback unions not restored")
+        # Resuming at 1 must exclude iter-0 so iter-0 diagnostics can be reported as new
+        lp1 = make_loop(run_id="resume", backend_kind="replay",
+                        max_iterations=2, resume_from=1)
+        expect(len(lp1.union_diagnostics) == 0 and len(lp1.union_productions) == 0,
+               "resuming at 1 must leave unions empty for iter-0 refinement")
 
 
 def test_replay_resume_does_not_precount_replayed_calls() -> None:

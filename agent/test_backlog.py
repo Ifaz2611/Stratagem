@@ -380,6 +380,136 @@ def test_html_report_stamps_utc_generation_time() -> None:
            "dashboard has no UTC 'Generated ...Z' stamp")
 
 
+# ------------------------------------------------------------- survey bug fixes
+def test_survey_non_xml_target_prompts() -> None:
+    from agent.loop import Loop
+    from fuzzer.targets import get_target
+    from fuzzer.targets.json_features import JSON_PRODUCTIONS
+
+    lp = Loop.__new__(Loop)
+    lp.prompts = Path(__file__).resolve().parent / "prompts"
+    lp.target = "json"
+    lp.target_obj = get_target("json")
+    lp.union_diagnostics = set()
+    lp.union_productions = set()
+    lp.directives = ["improve"]
+
+    prompt = lp._seed_prompt()
+    expect("g_object" in prompt, "JSON productions not in seed prompt")
+    expect("{parser_g4}" not in prompt and "{lexer_g4}" not in prompt, "placeholders left")
+
+    summary = {
+        "examples": 10,
+        "outcomes": {},
+        "acceptance_rate": 0.5,
+        "crash_count": 0,
+        "xml_shaped_rate": 0.9,
+        "distinct_diagnostic_templates": 1,
+        "diagnostic_templates": {"error 1": 2},
+        "input_len": {},
+        "structure": {
+            "productions_hit": 2,
+            "productions_total": len(JSON_PRODUCTIONS),
+            "hit": {"g_object": 5},
+            "missing": ["g_array"],
+            "depth_histogram": {},
+            "max_depth_seen": 2,
+            "boundaries": {},
+        },
+        "buckets": {},
+    }
+    refine = lp._refine_prompt(1, "SOURCE = 1\n", summary, [])
+    expect("g_pair" in refine or "g_array" in refine, "missing productions should use JSON productions")
+    expect("element" not in refine, "XML productions should not appear in JSON refine prompt")
+
+
+def test_survey_validate_target_bounds() -> None:
+    from agent.validate import Validation, out_of_bounds
+
+    custom_bounds = {"well_formed": (0.8, 1.0), "near_miss": (0.0, 0.1)}
+    bad = out_of_bounds({"well_formed": 0.5, "near_miss": 0.05}, bounds=custom_bounds)
+    expect("well_formed" in bad, "custom bounds not respected by out_of_bounds")
+
+    v = Validation(False, "mixture", mixture={"well_formed": 0.5, "near_miss": 0.05}, bounds=custom_bounds)
+    fb = v.feedback()
+    expect("80%" in fb, "custom bounds not formatted in feedback")
+
+
+def test_survey_resume_excludes_predecessor_iteration() -> None:
+    from agent.loop import Loop
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        for i in range(3):
+            idir = root / "iterations" / f"iter-{i}"
+            idir.mkdir(parents=True)
+            s = {"diagnostic_templates": {f"diag_{i}": 1}, "structure": {"hit": {f"p_{i}": 1}}}
+            (idir / "summary.json").write_text(json.dumps(s), encoding="utf-8")
+
+        lp = Loop.__new__(Loop)
+        lp.out = root
+        lp.resume_from = 2
+        lp.union_diagnostics = set()
+        lp.union_productions = set()
+
+        lp._restore_feedback_unions()
+        expect("diag_0" in lp.union_diagnostics, "iter-0 diagnostics should be restored")
+        expect("diag_1" not in lp.union_diagnostics, "iter-1 diagnostics must not be restored")
+        expect("p_0" in lp.union_productions, "iter-0 productions should be restored")
+        expect("p_1" not in lp.union_productions, "iter-1 productions must not be restored")
+
+
+def test_survey_distributed_stale_lease_preservation() -> None:
+    from fuzzer.distributed import _release_claim, plan_shards
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        plan = plan_shards(root, strategies=["baseline"], targets=["json"], examples=10, shards=1)
+        task = plan.tasks[0]
+        claim_file = plan.claim_path(task)
+        claim_file.parent.mkdir(parents=True, exist_ok=True)
+
+        claim_file.write_text(json.dumps({
+            "worker_id": "worker-B",
+            "pid": 99999,
+            "claimed_at": 100.0,
+        }), encoding="utf-8")
+
+        _release_claim(plan, task, worker_id="worker-A", pid=11111)
+        expect(claim_file.exists(), "stale worker A must not delete worker B's claim file")
+
+        _release_claim(plan, task, worker_id="worker-B", pid=99999)
+        expect(not claim_file.exists(), "matching worker B must unlink the claim file")
+
+
+def test_survey_validate_scratch_isolation_and_no_unverified_write() -> None:
+    from agent.validate import validate
+
+    with tempfile.TemporaryDirectory() as td:
+        dest = Path(td) / "strategy.py"
+        v1 = validate("```python\ndef broken(\n```", dest)
+        expect(not v1.ok and not dest.exists(), "syntax error wrote to dest")
+
+        bad_interface = """```python
+NAME = "bad"
+DESCRIPTION = "bad"
+```"""
+        v2 = validate(bad_interface, dest)
+        expect(not v2.ok and not dest.exists(), "interface failure wrote to dest")
+
+
+def test_survey_grammar_import_not_shadowed() -> None:
+    import sys
+    fuzzer_dir = str(Path(__file__).resolve().parent.parent / "fuzzer")
+    sys.path.insert(0, fuzzer_dir)
+    try:
+        import grammar
+        expect(hasattr(grammar, "__all__"), "grammar package does not have __all__")
+    finally:
+        if sys.path[0] == fuzzer_dir:
+            sys.path.pop(0)
+
+
 # --------------------------------------------------------------- standalone
 def _run_all() -> int:
     tests = [(name, fn) for name, fn in sorted(globals().items())

@@ -33,6 +33,7 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -79,6 +80,7 @@ class Validation:
     acceptance: float | None = None
     outcomes: dict = field(default_factory=dict)
     mixture: dict = field(default_factory=dict)
+    bounds: dict[str, tuple[float, float]] = field(default_factory=lambda: dict(CLASS_BOUNDS))
 
     def _mixture_advice(self) -> str:
         """Advice aimed at whichever class is out of bounds, and which way.
@@ -89,8 +91,9 @@ class Validation:
         the wrong way, which cost one run its whole seed budget.
         """
         parts = []
-        for cls in out_of_bounds(self.mixture):
-            lo, _ = CLASS_BOUNDS[cls]
+        bounds = self.bounds or CLASS_BOUNDS
+        for cls in out_of_bounds(self.mixture, bounds=bounds):
+            lo, _ = bounds[cls]
             text = _advice_for(cls, low=self.mixture.get(cls, 0.0) < lo)
             if text and text not in parts:
                 parts.append(text)
@@ -115,10 +118,11 @@ class Validation:
                     "documents() -> SearchStrategy[str], importing only hypothesis "
                     "and the standard library. Fix and resend.")
         if self.stage == "mixture":
+            bounds = self.bounds or CLASS_BOUNDS
             got = "\n".join(
                 f"  {k:13} {self.mixture.get(k, 0.0):>6.0%}   required "
                 f"{lo:.0%}{f' to {hi:.0%}' if hi < 1.0 else ' or more'}"
-                for k, (lo, hi) in CLASS_BOUNDS.items())
+                for k, (lo, hi) in bounds.items())
             return ("Your input-class mixture is outside the required bounds.\n\n"
                     f"{got}\n\n" + self._mixture_advice())
         if self.stage == "smoke":
@@ -245,45 +249,76 @@ def check_interface(path: Path, timeout_s: float = 120.0) -> tuple[bool, str, li
     return d["ok"], d.get("error", ""), d.get("samples", [])
 
 
-def validate(response_text: str, dest: Path, target: Any = "mxml") -> Validation:
+def validate(
+    response_text: str,
+    dest: Path,
+    target: Any = "mxml",
+    bounds: dict[str, tuple[float, float]] | None = None,
+) -> Validation:
     """Run all four gates. `dest` is where the accepted module is written."""
+    if bounds is None:
+        try:
+            from fuzzer.targets import get_target
+            bounds = getattr(get_target(target), "class_bounds", CLASS_BOUNDS)
+        except Exception:
+            bounds = CLASS_BOUNDS
+
     code = extract_code(response_text)
     if not code:
-        return Validation(False, "extract")
+        return Validation(False, "extract", bounds=bounds)
     if looks_truncated(code):
         return Validation(False, "truncated", code=code,
-                          error="block does not begin at the start of a module")
+                          error="block does not begin at the start of a module",
+                          bounds=bounds)
 
     try:
         compile(code, str(dest), "exec")
     except SyntaxError as exc:
-        return Validation(False, "syntax", error=f"{type(exc).__name__}: {exc}", code=code)
+        return Validation(False, "syntax", error=f"{type(exc).__name__}: {exc}",
+                          code=code, bounds=bounds)
 
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(code, encoding="utf-8")
+    with tempfile.TemporaryDirectory(prefix="validate_") as td:
+        tmp_dir = Path(td)
+        scratch = tmp_dir / f"{dest.stem}.py"
+        scratch.write_text(code, encoding="utf-8")
 
-    ok, err, samples = check_interface(dest)
-    if not ok:
-        return Validation(False, "interface", error=err, code=code)
+        ok, err, samples = check_interface(scratch)
+        if not ok:
+            return Validation(False, "interface", error=err, code=code, bounds=bounds)
 
-    # Gate 4: does the parser actually accept any of this?
-    from fuzzer.campaign import Campaign
-    tmp = REPO_ROOT / "runs" / ".validate"
-    c = Campaign(dest.stem, SMOKE_EXAMPLES, tmp, mode="survey", target=target)
-    summary = c.run()
-    acc = summary["acceptance_rate"]
+        # Gate 4: does the parser actually accept any of this?
+        from fuzzer.campaign import Campaign
+        from fuzzer.strategy_loader import StrategyLoader
 
-    mixture = {k: e["share"] for k, e in summary.get("buckets", {}).items()}
+        smoke_dir = tmp_dir / "smoke"
+        loader = StrategyLoader(strategies_dir=tmp_dir)
+        c = Campaign(
+            dest.stem,
+            SMOKE_EXAMPLES,
+            smoke_dir,
+            mode="survey",
+            target=target,
+            strategy_loader=loader,
+        )
+        summary = c.run()
+        acc = summary["acceptance_rate"]
 
-    v = Validation(True, "ok", code=code, samples=samples,
-                   acceptance=acc, outcomes=summary["outcomes"], mixture=mixture)
-    if acc < MIN_ACCEPTANCE:
-        v.ok, v.stage = False, "smoke"
-    elif acc > MAX_ACCEPTANCE:
-        v.ok, v.stage = False, "smoke"
-    elif out_of_bounds(mixture):
-        v.ok, v.stage = False, "mixture"
-    return v
+        mixture = {k: e["share"] for k, e in summary.get("buckets", {}).items()}
+
+        v = Validation(True, "ok", code=code, samples=samples,
+                       acceptance=acc, outcomes=summary["outcomes"], mixture=mixture,
+                       bounds=bounds)
+        if acc < MIN_ACCEPTANCE:
+            v.ok, v.stage = False, "smoke"
+        elif acc > MAX_ACCEPTANCE:
+            v.ok, v.stage = False, "smoke"
+        elif out_of_bounds(mixture, bounds=bounds):
+            v.ok, v.stage = False, "mixture"
+
+        if v.ok:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(code, encoding="utf-8")
+        return v
 
 
 def _advice_for(cls: str, low: bool) -> str:
@@ -299,14 +334,19 @@ def _advice_for(cls: str, low: bool) -> str:
     return ""
 
 
-def out_of_bounds(mixture: dict[str, float]) -> list[str]:
-    """Classes whose share falls outside CLASS_BOUNDS, worst first.
+def out_of_bounds(
+    mixture: dict[str, float],
+    bounds: dict[str, tuple[float, float]] | None = None,
+) -> list[str]:
+    """Classes whose share falls outside bounds, worst first.
 
     A class the strategy never produces counts as a share of zero, so an absent
     class fails its floor rather than passing by omission.
     """
+    if bounds is None:
+        bounds = CLASS_BOUNDS
     bad = []
-    for cls, (lo, hi) in CLASS_BOUNDS.items():
+    for cls, (lo, hi) in bounds.items():
         share = mixture.get(cls, 0.0)
         if share < lo - CLASS_MARGIN:
             bad.append((lo - share, cls))

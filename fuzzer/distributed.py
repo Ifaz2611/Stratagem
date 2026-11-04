@@ -422,9 +422,25 @@ def _claim_next(
     return None
 
 
-def _release_claim(plan: DistributedPlan, task: ShardTask) -> None:
+def _release_claim(
+    plan: DistributedPlan,
+    task: ShardTask,
+    worker_id: str | None = None,
+    pid: int | None = None,
+) -> None:
     try:
-        plan.claim_path(task).unlink()
+        claim = plan.claim_path(task)
+        if not claim.exists():
+            return
+        if worker_id is not None or pid is not None:
+            meta = _read_json(claim)
+            if not meta:
+                return
+            if worker_id is not None and meta.get("worker_id") != worker_id:
+                return
+            if pid is not None and meta.get("pid") != pid:
+                return
+        claim.unlink()
     except OSError:
         pass
 
@@ -516,7 +532,7 @@ def run_worker(
                 "error": f"{type(exc).__name__}: {exc}",
             })
         finally:
-            _release_claim(plan, task)
+            _release_claim(plan, task, worker_id=worker, pid=os.getpid())
 
         if on_task is not None:
             on_task(task, summary, error)

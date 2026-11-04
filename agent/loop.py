@@ -62,7 +62,7 @@ _FORMAT_PRAGMA = re.compile(r"^//\s*\$antlr-format.*$\n?", re.M)
 _RE_ITERATION = re.compile(r"Current strategy \(iteration (\d+)\)")
 
 
-def _grammar_body(filename: str) -> str:
+def _grammar_body(filename: str | Path) -> str:
     """The grammar text without its BSD licence header or formatter pragmas.
 
     Both are noise in a prompt: the licence says nothing about the language and
@@ -70,7 +70,12 @@ def _grammar_body(filename: str) -> str:
     comment block, not by splitting on the grammar declaration, which would
     remove the declaration itself.
     """
-    raw = (REPO_ROOT / "grammar" / filename).read_text(encoding="utf-8")
+    path = Path(filename)
+    if not path.is_absolute():
+        path = REPO_ROOT / "grammar" / path
+    if not path.is_file():
+        return ""
+    raw = path.read_text(encoding="utf-8")
     raw = _LICENSE_BLOCK.sub("", raw, count=1)
     raw = _FORMAT_PRAGMA.sub("", raw)
     return raw.strip()
@@ -454,9 +459,11 @@ class Loop:
 
         Without this, the first prompt after resume calls every diagnostic and
         production from only the immediately preceding iteration "new", even
-        when earlier iterations already reached it.
+        when earlier iterations already reached it. Excludes iteration
+        resume_from - 1 so the predecessor iteration being refined can still
+        report its new diagnostics.
         """
-        for i in range(self.resume_from):
+        for i in range(self.resume_from - 1):
             f = self.out / "iterations" / f"iter-{i}" / "summary.json"
             if not f.exists():
                 continue
@@ -680,12 +687,22 @@ class Loop:
     # ---------------------------------------------------------------- prompts
     def _seed_prompt(self) -> str:
         tpl = (self.prompts / "seed.md").read_text(encoding="utf-8")
+        g_file = getattr(self.target_obj, "grammar_file", None)
+        if g_file:
+            g_path = Path(g_file)
+            parser_body = _grammar_body(g_path)
+            is_xml = getattr(self.target_obj, "category", "") == "xml" or "XML" in g_path.name
+            lexer_body = _grammar_body("XMLLexer.g4") if is_xml else ""
+        else:
+            parser_body = _grammar_body("XMLParser.g4")
+            lexer_body = _grammar_body("XMLLexer.g4")
+        prods = tuple(getattr(self.target_obj, "productions", ()) or PRODUCTIONS)
         return (tpl
                 .replace("{grammar_commit}", GRAMMAR_COMMIT)
-                .replace("{parser_g4}", _grammar_body("XMLParser.g4"))
-                .replace("{lexer_g4}", _grammar_body("XMLLexer.g4"))
+                .replace("{parser_g4}", parser_body)
+                .replace("{lexer_g4}", lexer_body)
                 .replace("{productions}", "\n   ".join(
-                    "  ".join(PRODUCTIONS[i:i + 4]) for i in range(0, len(PRODUCTIONS), 4))))
+                    "  ".join(prods[i:i + 4]) for i in range(0, len(prods), 4))))
 
     def _refine_prompt(self, it: int, source: str, summary: dict, results: list[dict],
                        directive_override: str | None = None) -> str:
@@ -704,7 +721,8 @@ class Loop:
         new_prods = sorted(this_prods - self.union_productions)
         self.union_diagnostics |= this_diags
         self.union_productions |= this_prods
-        never_produced = [p for p in PRODUCTIONS if p not in self.union_productions]
+        prods = tuple(getattr(self.target_obj, "productions", ()) or PRODUCTIONS)
+        never_produced = [p for p in prods if p not in self.union_productions]
 
         bound_txt = self._format_boundaries(st.get("boundaries", {}))
         bucket_txt = self._format_buckets(summary.get("buckets", {}))
@@ -787,7 +805,8 @@ class Loop:
                 return None
             call_tag = tag if attempt == 0 else f"{tag}-repair{attempt}"
             r = self._call(user, call_tag, backend, iteration=it)
-            v = validate.validate(r.text, dest, target=self.target)
+            v = validate.validate(r.text, dest, target=self.target,
+                                  bounds=getattr(self.target_obj, "class_bounds", None))
             if v.ok:
                 acc = f"{v.acceptance:.1%}" if v.acceptance is not None else "?"
                 print(f"    [gate] {name} passed (smoke acceptance {acc})")
@@ -933,7 +952,8 @@ class Loop:
         dest = STRATEGY_DIR / f"{name}.py"
         for match in matches:
             response = "```python\n" + match.source + "\n```"
-            v = validate.validate(response, dest, target=self.target)
+            v = validate.validate(response, dest, target=self.target,
+                                  bounds=getattr(self.target_obj, "class_bounds", None))
             if not v.ok:
                 print(f"    [cache] match from {match.entry.target.name} "
                       f"(sim={match.similarity:.2f}) rejected at '{v.stage}'")
@@ -1028,7 +1048,8 @@ class Loop:
             backend = self.backend_seed if tag == "seed" else self.backend_refine
             r = self._call(user, f"{tag}-campaign-repair{attempt}", backend,
                            iteration=it)
-            v = validate.validate(r.text, dest, target=self.target)
+            v = validate.validate(r.text, dest, target=self.target,
+                                  bounds=getattr(self.target_obj, "class_bounds", None))
             if not v.ok:
                 print(f"    [gate] FAILED at '{v.stage}' -> campaign repair "
                       f"{attempt}/{repairs}")
