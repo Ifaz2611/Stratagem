@@ -35,11 +35,19 @@ _failed: list[str] = []
 
 
 def check(name: str, cond: bool, detail: str = "") -> None:
+    """Assert a condition and record it for main()'s end-of-run summary.
+
+    A failed check raises AssertionError immediately, so pytest fails the
+    running test function instead of silently reporting it as passed; the
+    totals still reach main() when the suite runs as a module.
+    """
     global _passed
     if cond:
         _passed += 1
-    else:
-        _failed.append(f"{name}{(': ' + detail) if detail else ''}")
+        return
+    failure = f"{name}{(': ' + detail) if detail else ''}"
+    _failed.append(failure)
+    raise AssertionError(failure)
 
 
 # =====================================================================

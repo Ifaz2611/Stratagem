@@ -383,11 +383,15 @@ def test_html_report_stamps_utc_generation_time() -> None:
 # ------------------------------------------------------------- survey bug fixes
 def test_survey_non_xml_target_prompts() -> None:
     from agent.loop import Loop
+    from agent.prompt_manager import PromptVersion
     from fuzzer.targets import get_target
     from fuzzer.targets.json_features import JSON_PRODUCTIONS
 
     lp = Loop.__new__(Loop)
     lp.prompts = Path(__file__).resolve().parent / "prompts"
+    # The loop renders through PromptVersion; a partially-constructed Loop
+    # must provide the same renderer __post_init__ would have loaded.
+    lp.prompt_version = PromptVersion.from_dir(lp.prompts, name="v1")
     lp.target = "json"
     lp.target_obj = get_target("json")
     lp.union_diagnostics = set()

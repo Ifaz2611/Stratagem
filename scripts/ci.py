@@ -2,8 +2,9 @@
 
 Two things are worth running before a push:
 
-  * ``--unit``    compile check, the agent test suite, and both self-check
-                  suites. Needs no harness, network or LLM credentials.
+  * ``--unit``    compile check, the agent and fuzzer test suites, and both
+                  self-check suites. Needs no harness, network or LLM
+                  credentials.
   * ``--replay``  copies a recorded transcript into a scratch run, replays it
                   through the real harness, and verifies every completed
                   iteration's strategy is byte-identical. Needs the asan
@@ -117,6 +118,14 @@ def run_unit(report: Report, *, cov: bool = False) -> None:
     if cov:
         agent_cmd += ["--cov=agent", "--cov-report=term-missing"]
     report.add(_step("agent tests", agent_cmd, capture=True))
+
+    # The fuzzer suites are hermetic (reference runners, no harness build), so
+    # they belong in every unit run; --cov-append folds their coverage into the
+    # same report the agent step started.
+    fuzzer_cmd = [sys.executable, "-m", "pytest", "fuzzer", "-q"]
+    if cov:
+        fuzzer_cmd += ["--cov=fuzzer", "--cov-append", "--cov-report=term-missing"]
+    report.add(_step("fuzzer tests", fuzzer_cmd, capture=True))
 
     report.add(_step("agent self-checks",
                      [sys.executable, "-m", "agent.selftest"], capture=True))

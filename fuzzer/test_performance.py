@@ -44,11 +44,19 @@ _failed: list[str] = []
 
 
 def check(name: str, cond: bool, detail: str = "") -> None:
+    """Assert a condition and record it for main()'s end-of-run summary.
+
+    A failed check raises AssertionError immediately, so pytest fails the
+    running test function instead of silently reporting it as passed; the
+    totals still reach main() when the suite runs as a module.
+    """
     global _passed
     if cond:
         _passed += 1
-    else:
-        _failed.append(f"{name}{(': ' + detail) if detail else ''}")
+        return
+    failure = f"{name}{(': ' + detail) if detail else ''}"
+    _failed.append(failure)
+    raise AssertionError(failure)
 
 
 # ---------------------------------------------------------------------------
@@ -221,6 +229,14 @@ def test_result_cache() -> None:
               f"removed {removed}")
         check("result_cache/prune_limit", cache3.entries() <= 2,
               f"entries {cache3.entries()}")
+
+        # Persistent per-thread connections must be releasable; on Windows an
+        # open handle keeps the TemporaryDirectory from being deleted. A
+        # second close is a no-op, not an error.
+        cache.close()
+        cache2.close()
+        cache3.close()
+        cache.close()
 
 
 # ---------------------------------------------------------------------------

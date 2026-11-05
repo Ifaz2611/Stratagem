@@ -395,7 +395,11 @@ class Campaign:
                     "productions": sorted(f.productions),
                 })
                 crash_dir.mkdir(parents=True, exist_ok=True)
-                (crash_dir / f"{r.input_sha256[:16]}.xml").write_bytes(payload)
+                # The extension comes from the target: binary DNS packets or
+                # HTTP requests saved as .xml mislead every inspection tool
+                # that later opens the crash directory.
+                crash_ext = getattr(target_obj, "payload_extension", "bin")
+                (crash_dir / f"{r.input_sha256[:16]}.{crash_ext}").write_bytes(payload)
                 (crash_dir / f"{r.input_sha256[:16]}.stderr.txt").write_text(
                     r.stderr, encoding="utf-8"
                 )
@@ -622,6 +626,10 @@ class Campaign:
             summary["corpus_memory"] = corpus_mgr.memory_stats()
         if cache is not None:
             summary["result_cache"] = cache.stats()
+            # Release this thread's handle now: on Windows an open SQLite
+            # file blocks deleting the run directory, and a short-lived
+            # campaign should not keep the lock until GC gets to it.
+            cache.close()
 
         if batch_history:
             summary["batch_history"] = batch_history

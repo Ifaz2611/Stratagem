@@ -294,10 +294,50 @@ class Loop:
             self.prompt_version = PromptVersion.from_dir(self.prompts, name=self.prompt_set)
 
         self.ab_tester = None
+        self.ab_variant: Any = None
+        # Productions seen by earlier iterations of this run; feeds the
+        # marginal-coverage metric recorded for each A/B arm.
+        self.ab_prior_productions: set[str] = set()
         if self.prompt_ab:
             variants = [v.strip() for v in re.split(r"[,;\s]+", self.prompt_ab) if v.strip()]
             if len(variants) >= 2:
                 self.ab_tester = PromptABTester(variants=variants, manager=self.prompt_manager)
+
+    def _choose_prompt_version(self, it: int) -> None:
+        """Point prompts at this iteration's A/B arm.
+
+        Without --prompt-ab this is a no-op and every iteration uses
+        ``self.prompt_set``. With it, the tester routes each iteration to a
+        variant (round-robin by default); rendering goes through the chosen
+        PromptVersion, and the iteration's measured outcome is recorded as a
+        trial so the experiment can be evaluated and reported at run end.
+        """
+        if self.ab_tester is None:
+            return
+        self.ab_variant = self.ab_tester.next_variant(iteration=it)
+        self.prompt_version = self.ab_variant
+        self.prompts = self.ab_variant.path or self.prompts
+        self.system = self.ab_variant.render_system()
+        logger.tag("prompt-ab", f"iteration {it} -> variant {self.ab_variant.name}")
+
+    def _observe_ab_trial(self, it: int, summary: dict, gate_failed: bool,
+                          new_productions: int = 0) -> None:
+        """Record one iteration's outcome against its A/B arm."""
+        if self.ab_tester is None or self.ab_variant is None:
+            return
+        st = summary.get("structure", {})
+        self.ab_tester.record_trial(self.ab_variant.name, it, {
+            "syntax_valid": not gate_failed,
+            "gate_passed": not gate_failed,
+            "acceptance_rate": summary.get("acceptance_rate", 0.0),
+            "productions_hit": st.get("productions_hit", 0),
+            "new_productions": new_productions,
+            "new_diagnostics": len(summary.get("diagnostic_templates", {})),
+            "crashes": summary.get("crash_count", 0),
+            "max_depth": st.get("max_depth_seen", 0),
+            "cost_usd": self.budget.cost_usd,
+            "wall_clock_s": summary.get("wall_clock_s", 0.0),
+        })
 
     def _init_harness(self) -> None:
         """Resolve or build generated harness when requested."""
@@ -686,7 +726,6 @@ class Loop:
 
     # ---------------------------------------------------------------- prompts
     def _seed_prompt(self) -> str:
-        tpl = (self.prompts / "seed.md").read_text(encoding="utf-8")
         g_file = getattr(self.target_obj, "grammar_file", None)
         if g_file:
             g_path = Path(g_file)
@@ -697,18 +736,18 @@ class Loop:
             parser_body = _grammar_body("XMLParser.g4")
             lexer_body = _grammar_body("XMLLexer.g4")
         prods = tuple(getattr(self.target_obj, "productions", ()) or PRODUCTIONS)
-        return (tpl
-                .replace("{grammar_commit}", GRAMMAR_COMMIT)
-                .replace("{parser_g4}", parser_body)
-                .replace("{lexer_g4}", lexer_body)
-                .replace("{productions}", "\n   ".join(
-                    "  ".join(prods[i:i + 4]) for i in range(0, len(prods), 4))))
+        # Rendering lives on PromptVersion so a variant registered in memory
+        # (A/B arm, create_variant) renders the same as one loaded from disk.
+        return self.prompt_version.render_seed(
+            grammar_commit=GRAMMAR_COMMIT,
+            parser_g4=parser_body,
+            lexer_g4=lexer_body,
+            productions=list(prods),
+        )
 
     def _refine_prompt(self, it: int, source: str, summary: dict, results: list[dict],
                        directive_override: str | None = None) -> str:
-        tpl = (self.prompts / "refine.md").read_text(encoding="utf-8")
         st = summary["structure"]
-        slow_txt = self._format_slowest(results)
         crash_txt = self._format_crashes(summary)
         diag = self._format_diagnostics(summary)
 
@@ -731,38 +770,44 @@ class Loop:
                      or (self.directives[(it - 1) % len(self.directives)]
                          if self.directives else "improve the strategy"))
 
-        return (tpl
-                .replace("{directive}", directive)
-                .replace("{boundaries}", bound_txt)
-                .replace("{buckets}", bucket_txt)
-                .replace("{new_diagnostics}",
-                         f"{len(new_diags)}\n" + "\n".join(f"  + {d}" for d in new_diags)
-                         if new_diags else "0  (nothing new -- this is the problem to fix)")
-                .replace("{new_productions}",
-                         f"{len(new_prods)}: " + ", ".join(new_prods) if new_prods else "0")
-                .replace("{union_diagnostics}", str(len(self.union_diagnostics)))
-                .replace("{union_diagnostic_list}",
-                         "\n".join(sorted(self.union_diagnostics)) or "(none)")
-                .replace("{iteration}", str(it))
-                .replace("{strategy_source}", source)
-                .replace("{examples}", str(summary["examples"]))
-                .replace("{outcomes}", json.dumps(summary["outcomes"], indent=2))
-                .replace("{acceptance_rate}", f"{summary['acceptance_rate']:.1%}")
-                .replace("{crash_count}", str(summary["crash_count"]))
-                .replace("{xml_shaped_rate}", f"{summary['xml_shaped_rate']:.1%}")
-                .replace("{productions_hit}", str(st["productions_hit"]))
-                .replace("{productions_total}", str(st["productions_total"]))
-                .replace("{productions_hit_detail}", "\n".join(
-                    f"{v:5d}  {k}" for k, v in sorted(st["hit"].items(), key=lambda kv: -kv[1])) or "(none)")
-                .replace("{productions_missing}", "\n".join(never_produced)
-                         or "(none -- full coverage across all iterations)")
-                .replace("{depth_histogram}", json.dumps(st["depth_histogram"], indent=2))
-                .replace("{max_depth}", str(st["max_depth_seen"]))
-                .replace("{distinct_templates}", str(summary["distinct_diagnostic_templates"]))
-                .replace("{diagnostic_templates}", diag)
-                .replace("{input_len}", json.dumps(summary["input_len"], indent=2))
-                .replace("{slowest}", slow_txt)
-                .replace("{crash_section}", crash_txt))
+        # Rendering lives on PromptVersion; the loop only supplies the measured
+        # values. The renderer owns the {slowest} block and the defaults; the
+        # loop passes explicit overrides for the placeholders whose historical
+        # formats differ from the renderer defaults (a JSON outcomes block, the
+        # joined diagnostic union) plus the loop-only fields, so every prompt
+        # set renders uniformly and existing outputs stay byte-identical.
+        return self.prompt_version.render_refine(
+            it=it,
+            source=source,
+            summary=summary,
+            results=results,
+            directive=directive,
+            boundaries=bound_txt,
+            buckets=bucket_txt,
+            # Historical loop formats for placeholders the renderer formats
+            # differently by default.
+            outcomes=json.dumps(summary["outcomes"], indent=2),
+            union_diagnostic_list="\n".join(sorted(self.union_diagnostics)) or "(none)",
+            union_diagnostics=str(len(self.union_diagnostics)),
+            # Pre-rendered marginal-progress strings (count plus the detail
+            # lines the loop has always shown).
+            new_diagnostics=(
+                f"{len(new_diags)}\n" + "\n".join(f"  + {d}" for d in new_diags)
+                if new_diags else "0  (nothing new -- this is the problem to fix)"),
+            new_productions=f"{len(new_prods)}: " + ", ".join(new_prods) if new_prods else "0",
+            # Loop-only values the base renderer does not build.
+            productions_missing="\n".join(never_produced)
+            or "(none -- full coverage across all iterations)",
+            crash_count=summary["crash_count"],
+            xml_shaped_rate=f"{summary['xml_shaped_rate']:.1%}",
+            productions_hit_detail="\n".join(
+                f"{v:5d}  {k}" for k, v in sorted(st["hit"].items(), key=lambda kv: -kv[1])) or "(none)",
+            depth_histogram=json.dumps(st["depth_histogram"], indent=2),
+            distinct_templates=str(summary["distinct_diagnostic_templates"]),
+            diagnostic_templates=diag,
+            input_len=json.dumps(summary["input_len"], indent=2),
+            crash_section=crash_txt,
+        )
 
     # ------------------------------------------------------------------- main
     def _obtain_strategy(self, it: int, prompt: str, tag: str,
@@ -1251,7 +1296,7 @@ class Loop:
 
         new_diags = set(summary.get("diagnostic_templates", {})) - self.union_diagnostics
         new_prods = set(st.get("hit", {})) - self.union_productions
-        iterations.append({
+        row = {
             "iteration": it, "strategy": name,
             "examples": examples,
             "source": source_kind,
@@ -1267,7 +1312,10 @@ class Loop:
             "tuning": decision.to_json(),
             "gate_failures": self._last_gate_failures,
             "ensemble": bool(self._last_ensemble),
-        })
+        }
+        if self.ab_tester is not None and self.ab_variant is not None:
+            row["prompt_ab_variant"] = self.ab_variant.name
+        iterations.append(row)
         if self.tuner is not None:
             self.tuner.observe(
                 it, examples=examples,
@@ -1306,6 +1354,9 @@ class Loop:
             "backend": self.backend_kind,
             "model": self.model or "(backend default)",
             "prompt_set": self.prompt_set,
+            "prompt_ab": ({"routing": self.ab_tester.routing,
+                           "variants": self.ab_tester.variant_names}
+                          if self.ab_tester is not None else None),
             "seed_model": self.seed_model,
             "refine_model": self.refine_model,
             "max_examples": self.max_examples,
@@ -1352,6 +1403,11 @@ class Loop:
             self._last_source_kind = "llm"
             self._last_ensemble = None
 
+            # With --prompt-ab, each iteration runs on its routed arm: the
+            # prompt version, system prompt and on-disk prompt directory all
+            # switch for this iteration only.
+            self._choose_prompt_version(it)
+
             if self.tuner is not None:
                 decision = self.tuner.decide(it)
             else:
@@ -1385,8 +1441,26 @@ class Loop:
                 it, name, source, source_kind, examples, summary, campaign_failed,
                 decision, idir, iterations)
 
+            # Feed the measured outcome back to the A/B experiment. The marginal
+            # productions recorded for the tuner are the interesting signal here
+            # too, so both consumers see the same number.
+            this_productions = set(summary["structure"].get("hit", {}))
+            self._observe_ab_trial(
+                it, summary,
+                gate_failed=bool(self._last_gate_failures),
+                new_productions=len(this_productions - self.ab_prior_productions),
+            )
+            self.ab_prior_productions |= this_productions
+
             results = [json.loads(line) for line in (idir / "results.jsonl").read_text(encoding="utf-8").splitlines()]
             prev_source, prev_summary, prev_results = source, summary, results
+
+        if self.ab_tester is not None:
+            report_path = self.out / "prompt_ab_report.md"
+            report_path.write_text(
+                self.ab_tester.render_report(), encoding="utf-8")
+            self.ab_tester.save(self.out / "prompt_ab_trials.json")
+            logger.tag("prompt-ab", f"report written to {report_path}")
 
         self._debug("run_finished", cost_usd=round(self.budget.cost_usd, 4),
                     llm_calls=self.budget.calls,

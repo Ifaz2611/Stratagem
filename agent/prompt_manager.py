@@ -155,7 +155,10 @@ class PromptVersion:
         outcome_txt = "\n".join(f"  {k}: {v}" for k, v in outcomes.items()) or "  (none)"
         diag_list = "\n".join(f"  - {d}" for d in (union_diagnostics or [])) or "  (none yet)"
 
-        substitutions = {
+        # Defaults first, then explicit kwargs win. The loop passes
+        # pre-rendered strings for some placeholders (e.g. a JSON outcomes
+        # block) so every prompt set renders the loop's established formats.
+        subs = {
             "iteration": str(it),
             "source": source,
             "strategy_source": source,
@@ -175,14 +178,14 @@ class PromptVersion:
             "boundaries": boundaries or "(not measured)",
             "buckets": buckets or "(not measured)",
         }
-        for k, v in substitutions.items():
+        subs.update({k: str(v) for k, v in kwargs.items()})
+
+        for k, v in subs.items():
             text = text.replace(f"{{{k}}}", v)
 
         if directive and "{directive}" not in self.refine_template:
             text = f"## Directive for this iteration\n\n**{directive}**\n\n{text}"
 
-        for k, v in kwargs.items():
-            text = text.replace(f"{{{k}}}", str(v))
         return text
 
     def validate(self) -> List[str]:

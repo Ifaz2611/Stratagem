@@ -1,9 +1,10 @@
 [tool.pytest.ini_options]
-# The agent suite is hermetic: it uses test doubles and temporary directories,
-# so it runs on every push without fetching a target or building a harness.
-# The fuzzer's integration suites are intentionally separate; run them through
-# scripts/ci.py --replay or their module entry points after building.
-testpaths = ["agent"]
+# Both the agent and the fuzzer suites are hermetic: they use test doubles,
+# the targets' Python reference runners and temporary directories, so they
+# run on every push without fetching a target or building a harness. The
+# replay job in CI additionally exercises the real sanitizer harness end to
+# end through scripts/ci.py --replay.
+testpaths = ["agent", "fuzzer"]
 python_files = ["test_*.py"]
 addopts = "-ra --strict-markers"
 filterwarnings = [
@@ -11,10 +12,11 @@ filterwarnings = [
 ]
 
 [tool.coverage.run]
-source = ["agent"]
+source = ["agent", "fuzzer"]
 branch = true
 omit = [
     "agent/test_*.py",
+    "fuzzer/test_*.py",
 ]
 
 [tool.coverage.report]

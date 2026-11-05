@@ -440,9 +440,11 @@ class OpenAICompatBackend:
     """Any OpenAI-compatible /v1/chat/completions endpoint.
 
     The wire format is the de-facto standard, so the same code drives OpenAI,
-    Anthropic (which exposes an OpenAI-compatible layer), a local Ollama or vLLM
-    server, or a gateway. The provider is selected by OPENAI_BASE_URL and
-    LLM_MODEL, so switching provider is configuration, not a code change.
+    a local Ollama or vLLM server, or a gateway. Anthropic's API is *not*
+    OpenAI-compatible: use the ``cli`` backend for it, or front it with an
+    OpenAI-compatible gateway such as LiteLLM. The provider is selected by
+    OPENAI_BASE_URL and LLM_MODEL, so switching provider is configuration,
+    not a code change.
     """
 
     name = "openai"
@@ -455,8 +457,10 @@ class OpenAICompatBackend:
         if not key:
             raise LLMError(
                 "OPENAI_API_KEY is not set. Put it in .env (see .env.example) "
-                "or export it. For Anthropic, also set "
-                "OPENAI_BASE_URL=https://api.anthropic.com/v1")
+                "or export it. For Anthropic models use --backend cli (the "
+                "Claude Code CLI), or route them through an OpenAI-compatible "
+                "gateway such as LiteLLM "
+                "(OPENAI_BASE_URL=http://localhost:4000/v1)")
 
         self.model = model or os.environ.get("LLM_MODEL") or DEFAULT_OPENAI_MODEL
         self.max_tokens = max_tokens

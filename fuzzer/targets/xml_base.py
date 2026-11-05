@@ -11,6 +11,7 @@ class XMLTarget(BaseTarget):
     """Abstract base target for XML parsers."""
 
     category: str = "xml"
+    payload_extension: str = "xml"
     grammar_file: Path | None = REPO_ROOT / "grammar" / "XMLParser.g4"
     productions: tuple[str, ...] = features.PRODUCTIONS
 

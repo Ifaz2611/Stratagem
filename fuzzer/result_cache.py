@@ -33,6 +33,7 @@ import hashlib
 import json
 import os
 import sqlite3
+import threading
 import time
 from pathlib import Path
 from typing import Any, Iterable, Iterator
@@ -68,10 +69,14 @@ def _fingerprint(path: Path | str | None) -> dict[str, Any] | None:
 class ResultCache:
     """SQLite-backed cache of :class:`RunResult` objects.
 
-    A connection is opened per operation. Harness execution costs milliseconds
-    to seconds, so the connection setup is noise, and this keeps the cache safe
-    to share between the thread pool used by ``fuzzer.parallel`` and between
-    processes sharing a work directory.
+    One connection per worker thread is kept open for the life of the cache.
+    Harness execution costs milliseconds to seconds, so opening, PRAGMA-ing
+    and closing the database for every payload turned the cache into a
+    bottleneck in high-throughput campaigns. WAL journal mode keeps the
+    single writer from blocking the concurrent readers in the thread pool
+    used by ``fuzzer.parallel``. Each worker closes its own handle with
+    :meth:`close`; a campaign does this when it finishes, and a thread that
+    exits without closing has its handle collected with the thread.
     """
 
     def __init__(
@@ -92,22 +97,41 @@ class ResultCache:
         self.evictions = 0
         self.errors = 0
         self._last_error: str | None = None
+        self._local = threading.local()
         if self.enabled:
             self._init()
 
     # --------------------------------------------------------------- lifecycle
+    @property
+    def _connection(self) -> sqlite3.Connection:
+        """This thread's open connection, creating it on first use.
+
+        SQLite handles must not cross threads, so the connection is stored in
+        thread-local storage: a campaign running in one thread gets exactly
+        one handle for all of its payloads, and a parallel worker gets its
+        own. The PRAGMAs are applied once per handle instead of once per
+        payload.
+        """
+        conn = getattr(self._local, "conn", None)
+        if conn is None:
+            try:
+                conn = sqlite3.connect(str(self.path), timeout=5.0)
+                conn.execute("PRAGMA journal_mode=WAL")
+                conn.execute("PRAGMA synchronous=NORMAL")
+                conn.execute("PRAGMA busy_timeout=5000")
+            except sqlite3.Error as exc:
+                self._fail(exc)
+                raise sqlite3.OperationalError(
+                    self._last_error or "result cache is disabled") from exc
+            self._local.conn = conn
+        return conn
+
     @contextlib.contextmanager
     def _session(self) -> Iterator[sqlite3.Connection]:
-        """A committed transaction on a connection that is always closed."""
-        conn = sqlite3.connect(str(self.path), timeout=5.0)
-        try:
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.execute("PRAGMA synchronous=NORMAL")
-            conn.execute("PRAGMA busy_timeout=5000")
-            with conn:
-                yield conn
-        finally:
-            conn.close()
+        """A committed transaction on this thread's persistent connection."""
+        conn = self._connection
+        with conn:
+            yield conn
 
     def _init(self) -> None:
         try:
@@ -131,8 +155,19 @@ class ResultCache:
         self.enabled = False
 
     def close(self) -> None:
-        """No-op: connections are per operation. Kept for symmetric APIs."""
-        return None
+        """Close this thread's connection.
+
+        Campaigns call this when they finish so the database file is released
+        promptly; on Windows an open handle blocks deletion of the containing
+        directory. Other workers' handles close when their threads end.
+        """
+        conn = getattr(self._local, "conn", None)
+        if conn is not None:
+            self._local.conn = None
+            try:
+                conn.close()
+            except sqlite3.Error:
+                pass
 
     # -------------------------------------------------------------------- key
     def context(

@@ -179,10 +179,12 @@ LLM_MODEL=gpt-5
 **Examples:**
 
 ```bash
-# Anthropic via OpenAI-compatible layer
+# Anthropic models: use `LLM_BACKEND=cli` (Claude Code CLI), or route them
+# through an OpenAI-compatible gateway such as LiteLLM. Anthropic's API does
+# not expose /v1/chat/completions, so pointing OPENAI_BASE_URL at it 404s.
 LLM_BACKEND=openai
-OPENAI_API_KEY=sk-ant-your-key
-OPENAI_BASE_URL=https://api.anthropic.com/v1
+OPENAI_API_KEY=sk-your-gateway-key
+OPENAI_BASE_URL=http://localhost:4000/v1
 LLM_MODEL=claude-sonnet-5
 
 # Local Ollama

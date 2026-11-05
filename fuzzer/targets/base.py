@@ -42,6 +42,9 @@ class BaseTarget(abc.ABC):
     name: str = "base"
     category: str = "xml"  # "xml", "json", "protocol"
     description: str = "Base target"
+    # Extension used when the campaign writes raw crash payloads to disk.
+    # XML targets override with "xml"; binary protocols keep "bin".
+    payload_extension: str = "bin"
     harness_binary: Path | None = None
     grammar_file: Path | None = None
     productions: tuple[str, ...] = ()

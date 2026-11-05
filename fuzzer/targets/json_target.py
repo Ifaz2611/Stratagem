@@ -40,6 +40,7 @@ class JSONTarget(BaseTarget):
     name: str = "json"
     category: str = "json"
     description: str = "JSON parser target proof-of-concept for non-XML grammars"
+    payload_extension: str = "json"
     harness_binary: Path = REPO_ROOT / "build" / "json" / "harness"
     grammar_file: Path = REPO_ROOT / "grammar" / "JSON.g4"
     productions: tuple[str, ...] = JSON_PRODUCTIONS
