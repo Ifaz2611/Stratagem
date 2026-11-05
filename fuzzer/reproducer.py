@@ -39,10 +39,12 @@ class DeltaDebugger:
         oracle: Callable[[bytes], bool],
         timeout_s: float = 30.0,
         max_iterations: int = 150,
+        target: BaseTarget | None = None,
     ) -> None:
         self.oracle = oracle
         self.timeout_s = timeout_s
         self.max_iterations = max_iterations
+        self.target = target
 
     def minimize(self, payload: bytes) -> bytes:
         """Minimise payload while oracle(payload) remains True."""
@@ -125,9 +127,13 @@ class DeltaDebugger:
 
         # Stage 4: Simplification pass (replace complex bytes with 'a' or '0')
         if len(current) <= 64:
+            delimiters = getattr(self.target, "minimization_delimiters", b"")
+            if isinstance(delimiters, str):
+                delimiters = delimiters.encode()
+            protected = set(delimiters) | {ord(b"\n"), ord(b" ")}
             for idx in range(len(current)):
                 b = current[idx]
-                if b not in (ord(b"<"), ord(b">"), ord(b"/"), ord(b"="), ord(b'"'), ord(b"\n"), ord(b" ")):
+                if b not in protected:
                     for simple in (b"a", b"0", b" "):
                         candidate = current[:idx] + simple + current[idx + 1:]
                         if self.oracle(candidate):
@@ -186,6 +192,18 @@ def build_crash_oracle(
         return False
 
     return oracle
+
+
+def minimize_payload(
+    payload: bytes,
+    target: BaseTarget | str = "mxml",
+    expected_signature: str | None = None,
+    timeout_s: float = 30.0,
+) -> bytes:
+    """Minimise an arbitrary crashing payload using the shared delta debugger."""
+    target_obj = get_target(target) if isinstance(target, str) else target
+    oracle = build_crash_oracle(target=target_obj, expected_signature=expected_signature)
+    return DeltaDebugger(oracle=oracle, timeout_s=timeout_s, target=target_obj).minimize(payload)
 
 
 @dataclass

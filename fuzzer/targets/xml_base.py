@@ -12,6 +12,7 @@ class XMLTarget(BaseTarget):
 
     category: str = "xml"
     payload_extension: str = "xml"
+    minimization_delimiters: bytes = b'<>/="'
     grammar_file: Path | None = REPO_ROOT / "grammar" / "XMLParser.g4"
     productions: tuple[str, ...] = features.PRODUCTIONS
 

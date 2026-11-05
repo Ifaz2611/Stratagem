@@ -25,6 +25,7 @@ from fuzzer.runner import (
     detect_sanitizer,
     get_sanitizer_env,
 )
+from fuzzer.targets import get_target
 from fuzzer.significance import (
     bootstrap_ci_difference,
     cohens_d,
@@ -37,7 +38,6 @@ from fuzzer.significance import (
     vargha_delaney_a12,
     welch_t_test,
 )
-from fuzzer.targets import get_target
 from fuzzer.triage import (
     BugClusterer,
     Severity,
@@ -232,7 +232,9 @@ def test_crash_triage() -> None:
 # =====================================================================
 def test_reproducer_generation() -> None:
     # 1. DeltaDebugger on string/bytes
-    oracle = lambda b: b"<crash_tag>" in b
+    def oracle(b: bytes) -> bool:
+        return b"<crash_tag>" in b
+
     dd = DeltaDebugger(oracle, timeout_s=5.0)
 
     heavy_input = b"""
@@ -250,6 +252,16 @@ def test_reproducer_generation() -> None:
     check("reproducer/dd_minimized", len(shrunk) < len(heavy_input))
     check("reproducer/dd_triggers_oracle", oracle(shrunk))
     check("reproducer/dd_contains_crash_tag", b"<crash_tag>" in shrunk)
+
+    # Simplification protects delimiters defined by the target, not XML syntax
+    # for every input format.
+    def length_two(payload: bytes) -> bool:
+        return len(payload) == 2
+
+    xml_minimal = DeltaDebugger(length_two, target=get_target("mxml")).minimize(b"<>")
+    json_minimal = DeltaDebugger(length_two, target=get_target("json")).minimize(b"<>")
+    check("reproducer/xml_delimiters_preserved", xml_minimal == b"<>", repr(xml_minimal))
+    check("reproducer/non_xml_angle_brackets_simplified", json_minimal == b"aa", repr(json_minimal))
 
     # 2. Script generators
     py_code = generate_python_reproducer(b"<test/>", target_name="mxml", signature="sig123", label="heap-overflow")

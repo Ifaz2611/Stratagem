@@ -34,10 +34,21 @@ from agent.errors import (DebugLog, explain_exception, format_exception,
                           validation_hint)
 from agent.fewshot import FewShotLibrary
 from agent.progress import RunStatus, normalize_mode
+from agent.prompting import (
+    build_refine_prompt,
+    build_seed_prompt,
+)
+from agent.reporting import (
+    format_boundaries,
+    format_buckets,
+    format_crashes,
+    format_diagnostics,
+    format_slowest,
+    write_iteration_log,
+)
 from agent.strategy_cache import StrategyCache
 from agent.tuning import HyperparameterTuner, TuningDecision
 from fuzzer.campaign import Campaign, MAX_EXAMPLES_PER_ITERATION
-from fuzzer.features import PRODUCTIONS
 from fuzzer.log import get_logger
 
 logger = get_logger("loop")
@@ -46,7 +57,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 PROMPTS_ROOT = REPO_ROOT / "agent" / "prompts"
 STRATEGY_DIR = REPO_ROOT / "fuzzer" / "strategies"
 
-GRAMMAR_COMMIT = "e756f2a2ee5565a9300666f100ba6acd874664f7"
 MAX_REPAIRS = 2
 MAX_ITERATIONS = 5
 # Resends for a response whose head was lost in transport. Capped so a
@@ -79,9 +89,6 @@ def _grammar_body(filename: str | Path) -> str:
     raw = _LICENSE_BLOCK.sub("", raw, count=1)
     raw = _FORMAT_PRAGMA.sub("", raw)
     return raw.strip()
-
-BASELINE = {"acceptance": "0.2%", "productions": "5.3/27", "depth": 0.3, "templates": 3.3}
-
 
 @dataclass
 class Budget:
@@ -690,123 +697,45 @@ class Loop:
     # ---------------------------------------------------------------- formatting
     @staticmethod
     def _format_slowest(results: list[dict]) -> str:
-        slowest = sorted(results, key=lambda r: -r["dur_ms"])[:3]
-        return "\n".join(
-            f"{r['dur_ms']:8.1f} ms  len={r['len']:<6} depth={r['structure']['max_depth']:<3} {r['outcome']}"
-            for r in slowest) or "(none)"
+        return format_slowest(results)
 
     @staticmethod
     def _format_crashes(summary: dict) -> str:
-        if summary.get("crash_groups"):
-            return "### Crashes found\n\n```\n" + "\n".join(
-                f"{sig}  x{b['count']}  {b['label']}"
-                for sig, b in summary["crash_groups"].items()) + "\n```\n\n" + (
-                "Keep whatever produced these and push harder on the same area.")
-        return ("### Crashes found\n\nNone yet. Sanitizers are active and a "
-                "known real bug is detected by this pipeline, so the "
-                "absence is real, not a detection failure.")
+        return format_crashes(summary)
 
     @staticmethod
     def _format_boundaries(boundaries: dict) -> str:
-        return "\n".join(
-            f"{k:20} max={v.get('max', 0):<8} p90={v.get('p90', 0):<8} "
-            f"p50={v.get('p50', 0):<8} distinct values={v.get('distinct', 0)}"
-            for k, v in boundaries.items()) or "(not measured)"
+        return format_boundaries(boundaries)
 
     @staticmethod
     def _format_buckets(buckets: dict) -> str:
-        return "\n".join(
-            f"{b:14} share={e['share']:6.1%}  acceptance={e['acceptance_rate']:6.1%}  n={e['n']}"
-            for b, e in sorted(buckets.items())) or "(not measured)"
+        return format_buckets(buckets)
 
     @staticmethod
     def _format_diagnostics(summary: dict) -> str:
-        return "\n".join(f"{c:5d}  {t}" for t, c in
-                         list(summary.get("diagnostic_templates", {}).items())[:20]) or "(none)"
+        return format_diagnostics(summary)
 
     # ---------------------------------------------------------------- prompts
     def _seed_prompt(self) -> str:
-        g_file = getattr(self.target_obj, "grammar_file", None)
-        if g_file:
-            g_path = Path(g_file)
-            parser_body = _grammar_body(g_path)
-            is_xml = getattr(self.target_obj, "category", "") == "xml" or "XML" in g_path.name
-            lexer_body = _grammar_body("XMLLexer.g4") if is_xml else ""
-        else:
-            parser_body = _grammar_body("XMLParser.g4")
-            lexer_body = _grammar_body("XMLLexer.g4")
-        prods = tuple(getattr(self.target_obj, "productions", ()) or PRODUCTIONS)
-        # Rendering lives on PromptVersion so a variant registered in memory
-        # (A/B arm, create_variant) renders the same as one loaded from disk.
-        return self.prompt_version.render_seed(
-            grammar_commit=GRAMMAR_COMMIT,
-            parser_g4=parser_body,
-            lexer_g4=lexer_body,
-            productions=list(prods),
+        return build_seed_prompt(
+            self.prompt_version,
+            self.target_obj,
+            _grammar_body,
         )
 
     def _refine_prompt(self, it: int, source: str, summary: dict, results: list[dict],
                        directive_override: str | None = None) -> str:
-        st = summary["structure"]
-        crash_txt = self._format_crashes(summary)
-        diag = self._format_diagnostics(summary)
-
-        # Marginal contribution: what this iteration found that no earlier one
-        # did. Scoring absolute per-iteration counts rewards re-covering old
-        # ground; FunFuzz uses marginal coverage as fitness for this reason.
-        this_diags = set(summary.get("diagnostic_templates", {}))
-        this_prods = set(st.get("hit", {}))
-        new_diags = sorted(this_diags - self.union_diagnostics)
-        new_prods = sorted(this_prods - self.union_productions)
-        self.union_diagnostics |= this_diags
-        self.union_productions |= this_prods
-        prods = tuple(getattr(self.target_obj, "productions", ()) or PRODUCTIONS)
-        never_produced = [p for p in prods if p not in self.union_productions]
-
-        bound_txt = self._format_boundaries(st.get("boundaries", {}))
-        bucket_txt = self._format_buckets(summary.get("buckets", {}))
-
-        directive = (directive_override
-                     or (self.directives[(it - 1) % len(self.directives)]
-                         if self.directives else "improve the strategy"))
-
-        # Rendering lives on PromptVersion; the loop only supplies the measured
-        # values. The renderer owns the {slowest} block and the defaults; the
-        # loop passes explicit overrides for the placeholders whose historical
-        # formats differ from the renderer defaults (a JSON outcomes block, the
-        # joined diagnostic union) plus the loop-only fields, so every prompt
-        # set renders uniformly and existing outputs stay byte-identical.
-        return self.prompt_version.render_refine(
+        return build_refine_prompt(
+            prompt_version=self.prompt_version,
+            target_obj=self.target_obj,
+            union_diagnostics=self.union_diagnostics,
+            union_productions=self.union_productions,
+            directives=self.directives,
             it=it,
             source=source,
             summary=summary,
             results=results,
-            directive=directive,
-            boundaries=bound_txt,
-            buckets=bucket_txt,
-            # Historical loop formats for placeholders the renderer formats
-            # differently by default.
-            outcomes=json.dumps(summary["outcomes"], indent=2),
-            union_diagnostic_list="\n".join(sorted(self.union_diagnostics)) or "(none)",
-            union_diagnostics=str(len(self.union_diagnostics)),
-            # Pre-rendered marginal-progress strings (count plus the detail
-            # lines the loop has always shown).
-            new_diagnostics=(
-                f"{len(new_diags)}\n" + "\n".join(f"  + {d}" for d in new_diags)
-                if new_diags else "0  (nothing new -- this is the problem to fix)"),
-            new_productions=f"{len(new_prods)}: " + ", ".join(new_prods) if new_prods else "0",
-            # Loop-only values the base renderer does not build.
-            productions_missing="\n".join(never_produced)
-            or "(none -- full coverage across all iterations)",
-            crash_count=summary["crash_count"],
-            xml_shaped_rate=f"{summary['xml_shaped_rate']:.1%}",
-            productions_hit_detail="\n".join(
-                f"{v:5d}  {k}" for k, v in sorted(st["hit"].items(), key=lambda kv: -kv[1])) or "(none)",
-            depth_histogram=json.dumps(st["depth_histogram"], indent=2),
-            distinct_templates=str(summary["distinct_diagnostic_templates"]),
-            diagnostic_templates=diag,
-            input_len=json.dumps(summary["input_len"], indent=2),
-            crash_section=crash_txt,
+            directive_override=directive_override,
         )
 
     # ------------------------------------------------------------------- main
@@ -1472,36 +1401,7 @@ class Loop:
         return final
 
     def _write_log(self, final: dict) -> None:
-        rows = final["iterations"]
-        lines = [
-            f"# Iteration log: {final['run_id']}", "",
-            f"Backend `{final['backend']}`, model `{final['model']}`, "
-            f"{final['max_examples']} examples per iteration.", "",
-            "| iter | source | examples | accept | productions | max depth | diagnostics | crashes | cum. cost |",
-            "|---|---|---|---|---|---|---|---|---|",
-            f"| baseline | - | - | {BASELINE['acceptance']} | {BASELINE['productions']} | "
-            f"{BASELINE['depth']} | {BASELINE['templates']} | 0 | $0 |",
-        ]
-        for r in rows:
-            cost_str = (f"${r['cost_usd_cumulative']:.2f} |"
-                        if r.get("cost_usd_cumulative") is not None else "n/a |")
-            lines.append(
-                f"| {r['iteration']} | {r.get('source', 'llm')} | "
-                f"{r.get('examples', final['max_examples'])} | "
-                f"{r['acceptance_rate']:.1%} | "
-                f"{r['productions_hit']}/{r['productions_total']} | {r['max_depth']} | "
-                f"{r['distinct_diagnostic_templates']} | {r['crash_count']} | {cost_str}")
-        b = final["budget"]
-        lines += ["", "## Budget", "",
-                  f"- LLM calls: **{b['llm_calls']}**",
-                  f"- Prompt tokens billed (incl. backend overhead): {b['billable_input_tokens']:,}",
-                  f"- Prompt tokens we authored (est.): {b['authored_prompt_tokens_est']:,}",
-                  f"- Output tokens: {b['output_tokens']:,}",
-                  f"- Cost: **${b['cost_usd']:.2f}** of ${b['max_usd']:.2f} cap"]
-        if not final.get("cost_cap_enforced", True):
-            lines.append("- Cost cap: **advisory only** — this backend reports no "
-                         "per-call price, so the cap cannot be enforced.")
-        (self.out / "ITERATION_LOG.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        write_iteration_log(self.out, final)
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:

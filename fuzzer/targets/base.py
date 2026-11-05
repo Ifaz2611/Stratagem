@@ -45,6 +45,7 @@ class BaseTarget(abc.ABC):
     # Extension used when the campaign writes raw crash payloads to disk.
     # XML targets override with "xml"; binary protocols keep "bin".
     payload_extension: str = "bin"
+    minimization_delimiters: bytes = b""
     harness_binary: Path | None = None
     grammar_file: Path | None = None
     productions: tuple[str, ...] = ()

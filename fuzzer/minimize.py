@@ -152,11 +152,14 @@ def minimize_payload(
     expected_signature: str | None = None,
     timeout_s: float = 30.0,
 ) -> bytes:
-    """Minimise an arbitrary crashing payload using hierarchical delta debugging."""
-    from fuzzer.reproducer import DeltaDebugger, build_crash_oracle
-    oracle = build_crash_oracle(target=target, expected_signature=expected_signature)
-    dd = DeltaDebugger(oracle=oracle, timeout_s=timeout_s)
-    return dd.minimize(payload)
+    """Compatibility entry point for the shared reproducer minimizer."""
+    from fuzzer.reproducer import minimize_payload as reduce_payload
+    return reduce_payload(
+        payload=payload,
+        target=target,
+        expected_signature=expected_signature,
+        timeout_s=timeout_s,
+    )
 
 
 def generate_reproducer_bundle(
@@ -173,4 +176,3 @@ def generate_reproducer_bundle(
         out_dir=out_dir,
         signature=signature,
     )
-
