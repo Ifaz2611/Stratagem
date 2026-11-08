@@ -1,269 +1,342 @@
 # Getting Started with Stratagem
 
-This guide will help you install, configure, and run the agentic grammar fuzzing framework.
+This guide explains what Stratagem is, how to install it, how to run fuzzing
+campaigns, and how the agent's learning loop works.
 
 ## Table of Contents
 
-1. [System Requirements](#system-requirements)
-2. [Installation](#installation)
-3. [Configuration](#configuration)
-4. [Building the Harness](#building-the-harness)
-5. [Running Your First Campaign](#running-your-first-campaign)
-6. [Understanding the Output](#understanding-the-output)
-7. [Advanced Usage](#advanced-usage)
-8. [Troubleshooting](#troubleshooting)
+1. [What Is This Project?](#what-is-this-project)
+2. [How It Works](#how-it-works)
+3. [System Requirements](#system-requirements)
+4. [Installation](#installation)
+5. [Configuration](#configuration)
+6. [Building the Harness](#building-the-harness)
+7. [Running Your First Campaign](#running-your-first-campaign)
+8. [How the Agent "Trains"](#how-the-agent-trains)
+9. [Using the Results](#using-the-results)
+10. [Advanced Usage](#advanced-usage)
+11. [Developer Tools](#developer-tools)
+12. [Troubleshooting](#troubleshooting)
+
+---
+
+## What Is This Project?
+
+**Stratagem** is an *agentic grammar fuzzing framework*. Instead of a
+traditional fuzzer that blindly mutates bytes, Stratagem uses a
+Large Language Model (LLM) as the driving intelligence:
+
+1. The LLM writes a **Python test strategy** (a Hypothesis generator) that
+   produces test inputs based on a formal grammar.
+2. The strategy is **validated** and run against a real, sanitizer-instrumented
+   parser — currently Mini-XML (mxml) v4.0.4, plus libxml2, Expat, TinyXML-2,
+   JSON, HTTP, DNS, and SMTP targets.
+3. The results (acceptance rate, error diversity, grammar coverage, crashes)
+   are fed back to the LLM.
+4. The LLM **refines** the strategy, and the cycle repeats.
+
+Over several iterations the agent learns to generate inputs that are more
+interesting to the parser: well-formed documents, near-miss documents that
+almost parse, and byte-hostile inputs that stress encodings and error paths.
+
+It is **blackbox** by design — the agent never sees code coverage inside the
+parser, only the parser's observable behavior (diagnostics, exit codes, crash
+signals). This keeps the feedback loop clean and reproducible.
+
+### What it can find
+
+- Memory-safety crashes (ASan/UBSan aborts) in the target parser
+- Logic bugs and parser inconsistencies (checked differentially against
+  Expat, libxml2, TinyXML-2)
+- Coverage gaps in the grammar (which productions the parser never reaches)
+- Unique error-message paths worth investigating
+
+Historical campaigns over ~10,000 inputs found a real upstream bug (non-ASCII
+error-message corruption, fixed in PR #357) and reproduced a known memory leak
+— see `docs/findings.md`.
+
+### Project layout
+
+```
+.
+├── agent/           # The agentic loop and LLM backends
+│   ├── loop.py      # Main generate → validate → run → refine cycle
+│   ├── llm.py       # LLM backends: cli, openai, replay
+│   ├── validate.py  # 4-gate strategy validation
+│   ├── ensemble.py  # Multi-model candidate voting
+│   ├── strategy_cache.py  # Reuse strategies across similar targets
+│   ├── tuning.py    # Automatic hyperparameter adaptation
+│   ├── fewshot.py   # Inject past winning strategies into prompts
+│   ├── prompts/     # Prompt templates, versions v1–v5
+│   └── ...
+├── fuzzer/          # The fuzzing engine
+│   ├── campaign.py  # Run a strategy through the harness
+│   ├── runner.py    # Execute harness, classify outcomes
+│   ├── strategies/  # LLM-generated strategies land here
+│   └── targets/     # Target abstraction (mxml, json, http, dns, smtp, ...)
+├── grammar/         # ANTLR grammars (XML, JSON, HTTP, SMTP)
+├── harness/         # C harness compiled with ASan/UBSan
+├── docs/            # Architecture, findings, tutorials
+├── scripts/         # fetch_grammar.sh, fetch_target.sh, ci.py, ...
+├── runs/            # All campaign outputs
+├── run.sh           # Docker entry point
+└── getstart.md      # This file
+```
+
+---
+
+## How It Works
+
+### The agentic loop
+
+Each iteration of `python -m agent.loop` performs five steps:
+
+```
+1. GENERATE   The LLM writes a Hypothesis strategy from the grammar + feedback
+2. VALIDATE   4 gates: extract code → syntax → interface → smoke test (50 inputs)
+3. RUN        The campaign feeds 500 generated documents to the harness
+4. SUMMARIZE  Measure acceptance rate, diagnostic diversity, structure coverage
+5. REFINE     Feed the summary back to the LLM with a directive to improve
+```
+
+If validation fails, the loop sends the specific failure feedback back to the
+LLM and allows up to **2 repair attempts** before abandoning that iteration.
+
+### Input classes
+
+Every generated document falls into one of three buckets:
+
+| Class | Meaning | Enforced bounds |
+|---|---|---|
+| `well_formed` | Should parse cleanly | ≥ 35% |
+| `near_miss` | XML-shaped but structurally wrong (`<a></b>`) | ≥ 15% |
+| `byte_hostile` | Encoding issues, control bytes, truncation | 15–45% |
+
+The agent steers the mixture toward these bounds; validation rejects strategies
+whose smoke-test mixture falls outside them.
+
+### Crash detection
+
+The C harness (`harness/harness.c`) classifies each input by exit code:
+
+| Code | Meaning |
+|---|---|
+| 0 | Parsed cleanly |
+| 3 | Parsed with diagnostics (mxml's "parsed-but-complained" state) |
+| 1 | Rejected at the parser's front door |
+| 2 | Harness error |
+| signal | Crash (ASan/UBSan abort) |
+
+Sanitizers are configured to **abort** on error so a crash is unmistakable.
+
+### Feedback signals (blackbox purity)
+
+The agent measures, without any coverage instrumentation:
+
+- **Acceptance rate** — fraction of inputs the parser accepted (target 40–70%)
+- **Diagnostic templates** — distinct parser error messages reached
+- **Productions hit** — which of the 27 tracked grammar productions were used
+- **Input class mixture** — well_formed / near_miss / byte_hostile shares
+- **Marginal yield** — new diagnostics or coverage gained per extra example
+- **Crashes** — grouped by signature for deduplication
+
+---
 
 ## System Requirements
 
-### Minimum Requirements
+### Minimum
 
-- **Operating System**: Linux, macOS, or Windows (with WSL2 recommended)
-- **Python**: 3.10 or higher
-- **Memory**: 4 GB RAM minimum (8 GB recommended)
-- **Disk**: 2 GB free space
+- **OS**: Linux, macOS, or Windows (WSL2 or Docker strongly recommended)
+- **Python**: 3.10+
+- **RAM**: 4 GB minimum, 8 GB recommended
+- **Disk**: ~2 GB free
+- **C toolchain**: gcc or clang + make (to build the harness)
 
-### For Docker Setup
+### For LLM backends
+
+| Backend | Extra requirements |
+|---|---|
+| `replay` | None — replays recorded transcripts, no network |
+| `openai` | API key + OpenAI-compatible endpoint |
+| `cli` | Claude Code CLI + subscription token |
+
+### Docker (optional but recommended)
 
 - Docker Engine 20.10+
-- Docker Compose (optional)
 
-### For LLM Backends
-
-- **Replay mode**: No additional requirements
-- **Claude Code CLI**: Install via `npm install -g @anthropic-ai/claude-code`
-- **OpenAI-compatible**: API key and endpoint URL
+---
 
 ## Installation
 
-### Option 1: Docker (Recommended)
-
-Docker provides a reproducible environment with all dependencies pre-configured.
-
-#### Step 1: Clone the Repository
+### Option 1: Docker (recommended)
 
 ```bash
+# Clone the repository
 git clone <repository-url>
-cd Stratagem
-```
+cd Fuzz-agent
 
-#### Step 2: Build the Container
-
-```bash
-# Basic build (replay and OpenAI backends)
+# Build the image (replay + openai backends)
 ./run.sh build
 
-# Build with Claude Code CLI support
+# Or include the Claude Code CLI
 ./run.sh build --with-cli
-```
 
-The build process:
-- Downloads and compiles Mini-XML with sanitizers
-- Installs Python dependencies
-- Configures the harness
-- Sets up the runtime environment
-
-#### Step 3: Verify the Build
-
-```bash
 # Enter the container
 ./run.sh shell
-
-# Inside the container, verify the harness
-ls -la build/asan/harness
-python -c "import hypothesis; print(hypothesis.__version__)"
 ```
 
-### Option 2: Local Development
+The image pre-builds Mini-XML with sanitizers and installs all Python
+dependencies. `runs/` is bind-mounted, so campaign artifacts persist on your
+host.
 
-For development or custom configurations, install locally.
+You can also run one command without entering a shell:
 
-#### Step 1: Install System Dependencies
+```bash
+./run.sh python -m agent.loop --backend replay --run-id demo
+```
+
+### Option 2: Local development
+
+#### Step 1 — system dependencies
 
 **Ubuntu/Debian:**
+
 ```bash
 sudo apt-get update
-sudo apt-get install -y \
-    build-essential \
-    git \
-    python3 \
-    python3-venv \
-    libxml2-dev
+sudo apt-get install -y build-essential git python3 python3-venv libxml2-dev
 ```
 
 **macOS:**
+
 ```bash
 brew install python3 git
 ```
 
-**Windows (WSL2):**
-```bash
-sudo apt-get update
-sudo apt-get install -y build-essential git python3 python3-venv
-```
+**Windows:** use WSL2 (recommended) or Docker. Native Windows requires
+MinGW-w64 and `make` in your PATH; the project is primarily tested on
+Linux/macOS.
 
-**Windows with MinGW:**
-```bash
-# Install MinGW-w64 and make
-# Ensure gcc and make are in your PATH
-```
-
-**Note:** The C harness build requires `make` and a C compiler (gcc or clang). On Windows, use WSL2 or install MinGW-w64. The project is primarily tested on Linux and macOS.
-
-#### Step 2: Create Python Virtual Environment
+#### Step 2 — virtual environment
 
 ```bash
-# Create virtual environment
 python3 -m venv .venv
-
-# Activate it
-# On Linux/macOS:
-source .venv/bin/activate
-# On Windows:
-.venv\Scripts\activate
+source .venv/bin/activate      # Linux/macOS
+# .venv\Scripts\activate       # Windows
 ```
 
-#### Step 3: Install Python Dependencies
+#### Step 3 — Python dependencies
 
 ```bash
 pip install --upgrade pip
 pip install -r requirements.txt
+# For contributors/tests:
+pip install -r requirements-dev.txt
 ```
 
-The main dependencies are:
-- `hypothesis==6.140.3` - Property-based testing library
-- `openai==2.14.0` - OpenAI API client (for openai backend)
+Key dependencies: `hypothesis` (strategy generation) and `openai`
+(OpenAI-compatible backend).
 
-#### Step 4: Fetch Grammar and Target
+#### Step 4 — fetch grammar and target
 
 ```bash
-# Download ANTLR XML grammar
-./scripts/fetch_grammar.sh
-
-# Download and checkout Mini-XML v4.0.4
-./scripts/fetch_target.sh
+./scripts/fetch_grammar.sh   # ANTLR XML grammar
+./scripts/fetch_target.sh    # Mini-XML v4.0.4 (checksum-verified)
 ```
 
-These scripts verify checksums to ensure reproducibility.
+Both scripts verify checksums so every environment tests the exact same
+parser revision.
+
+---
 
 ## Configuration
 
-### Environment Variables
-
-Copy the example configuration:
+Copy the example config and edit it:
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` to configure your LLM backend:
+### Backend: replay (default)
 
-#### Replay Mode (Default)
-
-No configuration needed. Replays recorded transcripts without network access.
+No credentials, no network. Replays a recorded transcript from `runs/`.
 
 ```bash
 LLM_BACKEND=replay
 ```
 
-#### OpenAI-Compatible Backend
-
-For OpenAI, Anthropic, or local models (Ollama, vLLM):
+### Backend: openai (any OpenAI-compatible endpoint)
 
 ```bash
 LLM_BACKEND=openai
-OPENAI_API_KEY=sk-your-api-key-here
+OPENAI_API_KEY=sk-your-key
 OPENAI_BASE_URL=https://api.openai.com/v1
 LLM_MODEL=gpt-5
 ```
 
-**Examples:**
+Works with OpenAI, Anthropic's OpenAI-compatible layer, Ollama, vLLM, or any
+gateway:
 
 ```bash
-# Anthropic models: use `LLM_BACKEND=cli` (Claude Code CLI), or route them
-# through an OpenAI-compatible gateway such as LiteLLM. Anthropic's API does
-# not expose /v1/chat/completions, so pointing OPENAI_BASE_URL at it 404s.
-LLM_BACKEND=openai
-OPENAI_API_KEY=sk-your-gateway-key
-OPENAI_BASE_URL=http://localhost:4000/v1
+# Anthropic via OpenAI-compatible layer
+OPENAI_BASE_URL=https://api.anthropic.com/v1
 LLM_MODEL=claude-sonnet-5
 
 # Local Ollama
-LLM_BACKEND=openai
-OPENAI_API_KEY=not-needed
 OPENAI_BASE_URL=http://localhost:11434/v1
 LLM_MODEL=llama2
 ```
 
-#### Claude Code CLI Backend
-
-Requires a Claude subscription:
+### Backend: cli (Claude Code subscription)
 
 ```bash
 LLM_BACKEND=cli
-CLAUDE_CODE_OAUTH_TOKEN=your-token-here
+CLAUDE_CODE_OAUTH_TOKEN=your-token    # generate: claude setup-token
 ```
 
-Generate a token with:
+Requires building the Docker image with `--with-cli`, or having the Claude
+Code CLI installed locally.
+
+### Precedence
+
+Explicit CLI flags > shell environment > `.env` > defaults. So this works
+without editing `.env`:
+
 ```bash
-claude setup-token
-```
-
-### Environment Variable Precedence
-
-Environment variables set in your shell take precedence over `.env`:
-
-```bash
-# This overrides .env
 LLM_BACKEND=replay python -m agent.loop --run-id test
 ```
+
+---
 
 ## Building the Harness
 
 The C harness must be compiled with sanitizers for crash detection.
 
-### Inside Docker
-
-The harness is pre-built in the container. Verify it:
-
-```bash
-./run.sh shell
-ls -la build/asan/harness
-```
-
-### Local Build
+### Local build
 
 ```bash
 cd harness
-./build.sh
+./build.sh          # ASan + UBSan, output: build/asan/harness
 cd ..
 ```
 
-The build script:
-- Compiles Mini-XML with AddressSanitizer and UndefinedBehaviorSanitizer
-- Links the harness against the instrumented library
-- Places the binary at `build/asan/harness`
+In Docker it is pre-built; verify with `ls build/asan/harness` inside the
+container.
 
-### Verify the Build
-
-Run the smoke test:
+### Smoke test
 
 ```bash
 cd harness
 ./smoke_test.sh
 ```
 
-This tests:
-- Positive control: Known crash (issue #350)
-- Negative control: Similar non-crashing input
-- Basic parsing functionality
+Checks a known crash (issue #350), a similar non-crashing control, and basic
+parsing. Expect the crash to be detected and the control to pass.
 
-Expected output should show the crash detected and the control passing.
+---
 
 ## Running Your First Campaign
 
-### Quick Start with Replay Mode
-
-Replay mode uses pre-recorded LLM responses, requiring no credentials:
+### Quick start — replay mode (no credentials)
 
 ```bash
 python -m agent.loop \
@@ -273,18 +346,13 @@ python -m agent.loop \
   --max-examples 500
 ```
 
-**What happens:**
+This replays recorded LLM responses, regenerates the strategies, and runs
+each through the harness. Results land in `runs/my-first-run/`.
 
-1. The loop loads a recorded transcript from `runs/loop/transcript/`
-2. It replays the LLM responses in order
-3. Each iteration generates and tests 500 XML documents
-4. Results are saved to `runs/my-first-run/`
-
-### Run with a Real LLM
-
-#### Using OpenAI
+### With a real LLM
 
 ```bash
+# OpenAI-compatible
 python -m agent.loop \
   --backend openai \
   --model gpt-5 \
@@ -292,11 +360,8 @@ python -m agent.loop \
   --max-iterations 5 \
   --max-examples 500 \
   --max-usd 5.00
-```
 
-#### Using Claude Code CLI
-
-```bash
+# Claude Code CLI
 python -m agent.loop \
   --backend cli \
   --model sonnet \
@@ -306,148 +371,217 @@ python -m agent.loop \
   --max-usd 5.00
 ```
 
-### Command-Line Options
+### All loop options
 
 ```
 python -m agent.loop [OPTIONS]
 
-Options:
-  --backend {replay,openai,cli}
-          LLM backend to use (default: replay)
-  --run-id TEXT
-          Identifier for this run (default: run)
-  --max-iterations INTEGER
-          Number of iterations (1-5, default: 5)
-  --max-examples INTEGER
-          Examples per iteration (1-500, default: 500)
-  --max-usd FLOAT
-          Cost cap in USD (default: 5.00)
-  --model TEXT
-          Override default model
-  --base-url TEXT
-          Override base URL for openai backend
-  --seed-model TEXT
-          Model for seed generation (if different from refine)
-  --refine-model TEXT
-          Model for refinement iterations
-  --prompt-set {v1,v2,v3,v4,v5}
-          Prompt version to use (default: v2)
-  --resume-from INTEGER
-          Resume from this iteration (0-based)
+Core:
+  --backend {cli,openai,replay}   default: LLM_BACKEND env, else replay
+  --run-id TEXT                   run directory name (default: loop)
+  -n, --max-examples INT          documents per iteration (default: 500)
+  -i, --iterations INT            max iterations (default: 5)
+  --max-usd FLOAT                 spend cap in USD (default: 5.00)
+  --model TEXT                    model override (default: LLM_MODEL env)
+  --base-url TEXT                 OpenAI-compatible endpoint override
+  --prompt-set {v1..v5}           prompt version (default: v2)
+  --seed-model TEXT               model for the seed call only
+  --refine-model TEXT             model for refine calls
+  --target {mxml,libxml2,expat,tinyxml2,json,http,dns,smtp}
+  --resume-from INT               resume at this iteration (0-based)
+
+Agent enhancements:
+  --ensemble-models m1,m2         one strategy candidate per model, voted on
+  --ensemble-candidates N         N candidates of the same model
+  --screening-examples N          examples per ensemble screen (default: 50)
+  --use-strategy-cache            reuse a validated strategy from a similar target
+  --cache-similarity FLOAT        similarity threshold (default: 0.70)
+  --few-shot                      inject past winning strategies into prompts
+  --few-shot-k N                  max few-shot examples (default: 3)
+  --autotune                      adapt examples/repairs/directive per iteration
+  --tune-state PATH               tuning state file
+  --use-generated-harness         use harness/generated/<target>/ if present
+
+LLM enhancements:
+  --stream                        stream responses for faster feedback
+  --prompt-ab v4,v5               A/B test prompt sets
+  --fallbacks cli,replay          fallback backends on failure
+  --circuit-breaker               protect against failing backends
+
+Performance:
+  --cache-results                 reuse harness results for identical inputs
+  --max-corpus-entries N          bound in-memory corpus size
+
+Discovery:
+  --coverage-guided               optional coverage feedback (off by default)
+  --no-structured-diagnostics     disable structured diagnostic extraction
+
+Developer experience:
+  --progress {auto,on,off}        progress bars (default: auto, TTY only)
+  --status {auto,on,off}          real-time status lines
+  --debug                         write runs/<id>/debug.jsonl event log
 ```
 
-### Example Campaigns
-
-#### Short Test Run
+### Choosing a target
 
 ```bash
-python -m agent.loop \
-  --backend replay \
-  --run-id quick-test \
-  --max-iterations 1 \
-  --max-examples 100
+python -m agent.loop --target expat --backend replay --run-id expat-run
+python -m fuzzer.campaign baseline --target json
 ```
 
-#### Budget-Conscious Run
+Targets: `mxml` (default), `libxml2`, `expat`, `tinyxml2`, `json`, `http`,
+`dns`, `smtp`. See `docs/tutorial-adding-targets.md` to add your own.
+
+### Useful campaign shapes
 
 ```bash
-python -m agent.loop \
-  --backend openai \
-  --model gpt-4o-mini \
-  --run-id budget-run \
-  --max-iterations 5 \
-  --max-examples 500 \
-  --max-usd 2.00
+# Quick smoke run
+python -m agent.loop --backend replay --run-id quick -i 1 -n 100
+
+# Budget-conscious real run
+python -m agent.loop --backend openai --model gpt-4o-mini \
+  --run-id budget -i 5 -n 500 --max-usd 2.00
+
+# Resume an interrupted run
+python -m agent.loop --backend replay --run-id my-run --resume-from 2
 ```
 
-#### Resume Interrupted Run
+---
 
-If a run fails midway:
+## How the Agent "Trains"
+
+Stratagem does not do gradient training — the LLM weights never change. What
+"training" means here is the agent **accumulating and reusing strategy
+knowledge** across iterations and across runs. Five mechanisms do this:
+
+### 1. Iterative refinement (the core loop)
+
+Each iteration, the LLM receives the previous strategy plus a structured
+feedback summary and must improve it. The loop rotates through refinement
+**directives** — focused instructions like "increase near-miss share",
+"reach an uncovered production", or "shrink input sizes" — so each iteration
+attacks a different weakness.
+
+### 2. Prompt sets (v1–v5)
+
+The prompts live in `agent/prompts/v*/` and evolve:
+
+- **v1**: original acceptance/diagnostics/coverage feedback
+- **v2**: added input-class mixture, marginal scoring, rotating directives
+- **v3–v5**: further refinements (size boundaries, validation rules)
 
 ```bash
-python -m agent.loop \
-  --backend replay \
-  --run-id my-run \
-  --resume-from 2
+python -m agent.loop --prompt-set v5 --run-id v5-run
 ```
 
-This resumes from iteration 2, using the already-completed iterations 0 and 1.
+Use `--prompt-ab v4,v5` to A/B two prompt sets statistically.
 
-## Understanding the Output
+### 3. Few-shot reuse (`--few-shot`)
 
-### Directory Structure
+The loop scans `runs/*/iterations/` for past successful strategies, ranks them
+with the same scoring function used for measurement, and injects the top-k
+(only from similar targets) into the seed/refine prompt. Successful strategies
+from earlier runs literally become examples for new ones.
+
+```bash
+python -m agent.loop --backend openai --few-shot --few-shot-k 3
+```
+
+### 4. Strategy cache (`--use-strategy-cache`)
+
+Validated strategies are stored in `runs/.strategy_cache/` keyed by a
+`TargetProfile` (target name, category, grammar hash, production vocabulary).
+When you fuzz a similar target — e.g., moving from `mxml` to `expat` (both
+XML, similarity ~0.8–1.0) — the best matching strategy is retrieved and
+**re-validated** against the new target before use, skipping the seed LLM
+call. XML and JSON score below 0.10, so cross-format reuse never happens by
+accident. Delete the cache directory to reset.
+
+```bash
+python -m agent.loop --backend openai --target expat \
+  --use-strategy-cache --run-id expat-reuse
+```
+
+### 5. Automatic tuning (`--autotune`)
+
+Adapts loop hyperparameters from the measurements already collected:
+
+- **examples**: hill-climbs the per-iteration budget on marginal yield
+- **repairs**: rises after validation/campaign failures, falls after clean streaks
+- **directive**: UCB1 bandit over the rotating refinement directives
+
+State persists in `runs/<run-id>/tuning.json` and survives `--resume-from`.
+
+```bash
+python -m agent.loop --backend openai --autotune -i 5
+```
+
+### 6. Ensemble voting (`--ensemble-models`)
+
+Several models each write a candidate strategy. Each is screened on a small
+campaign, then ranked by a weighted vote over **measurements** — crashes count
+10× more than tidiness. No extra LLM calls beyond the candidates; fully
+replayable.
+
+```bash
+python -m agent.loop --backend openai \
+  --ensemble-models gpt-5,gpt-4o-mini,claude-sonnet-5 \
+  --screening-examples 80
+```
+
+### Split models
+
+Use a strong model for the one-shot seed and a cheap model for refinements:
+
+```bash
+python -m agent.loop --backend openai \
+  --seed-model gpt-5 --refine-model gpt-4o-mini
+```
+
+### The takeaway
+
+- **First run**: the agent "learns" within a single campaign — each iteration
+  sees the previous iteration's failures.
+- **Across runs**: `--few-shot`, `--use-strategy-cache`, and `--autotune` carry
+  knowledge forward so later campaigns start smarter.
+- **Across targets**: the strategy cache transfers validated knowledge between
+  similar parsers.
+
+---
+
+## Using the Results
+
+### Directory layout
 
 ```
 runs/my-run/
 ├── iterations/
 │   ├── iter-0/
-│   │   ├── strategy.py          # Generated Hypothesis strategy
-│   │   ├── summary.json         # Iteration statistics
-│   │   ├── results.jsonl        # Per-input results (one per line)
-│   │   ├── corpus.jsonl.gz      # Generated inputs (base64-encoded)
-│   │   └── crashes/             # Crash artifacts (if any)
-│   │       ├── abc123...xml     # Crashing input
-│   │       └── abc123...stderr.txt  # Sanitizer output
-│   ├── iter-1/
-│   └── ...
-├── transcript/
-│   ├── call-1/
-│   │   ├── system.md            # System prompt
-│   │   ├── user.md              # User prompt
-│   │   ├── meta.json            # Call metadata
-│   │   └── response.json        # LLM response
-│   ├── call-2/
-│   └── ...
+│   │   ├── strategy.py        # the generated Hypothesis strategy
+│   │   ├── summary.json       # iteration statistics
+│   │   ├── results.jsonl      # one record per input
+│   │   ├── corpus.jsonl.gz    # generated inputs (base64)
+│   │   ├── crashes/           # crash artifacts + sanitizer stderr
+│   │   ├── ensemble.json      # vote report (ensembles only)
+│   │   ├── cache_hit.json     # reuse provenance (cache only)
+│   │   └── few_shot.md        # examples injected (few-shot only)
+│   └── iter-1/ ...
+├── transcript/                # every LLM call: system.md, user.md,
+│   ├── call-1/ ...            #   response.json, meta.json
+├── tuning.json                # autotune state (autotune only)
+├── debug.jsonl                # structured event log (--debug only)
 └── final_summary.json
 ```
 
-### Summary.json Structure
+### Key metrics in `summary.json`
 
-Each iteration's summary includes:
+- `acceptance_rate` — aim for 40–70%; too low means inputs die at the front door
+- `distinct_diagnostic_templates` — unique parser errors reached
+- `structure.productions_hit / productions_total` — grammar coverage
+- `buckets` — well_formed / near_miss / byte_hostile shares and rates
+- `crash_count` — crashes found this iteration
 
-```json
-{
-  "strategy": "gen_iter0",
-  "mode": "survey",
-  "examples": 500,
-  "wall_clock_s": 45.2,
-  "outcomes": {
-    "parsed_clean": 150,
-    "parsed_diag": 80,
-    "rejected": 270
-  },
-  "acceptance_rate": 0.46,
-  "buckets": {
-    "well_formed": {"share": 0.35, "acceptance_rate": 0.85},
-    "near_miss": {"share": 0.40, "acceptance_rate": 0.15},
-    "byte_hostile": {"share": 0.25, "acceptance_rate": 0.02}
-  },
-  "crash_count": 0,
-  "distinct_diagnostic_templates": 15,
-  "structure": {
-    "productions_hit": 22,
-    "productions_total": 27,
-    "missing": ["x_bom", "x_invalid_utf8"],
-    "max_depth_seen": 12
-  },
-  "diagnostic_templates": {
-    "XML does not start with '<'": 45,
-    "mismatched close tag": 30,
-    ...
-  }
-}
-```
-
-### Key Metrics
-
-- **acceptance_rate**: Fraction of inputs the parser accepted (aim for 40-70%)
-- **distinct_diagnostic_templates**: Number of unique error messages reached
-- **productions_hit/productions_total**: Grammar productions covered
-- **buckets**: Distribution across well_formed, near_miss, byte_hostile
-
-### Real-Time Output
-
-During a run, you'll see:
+### Real-time output
 
 ```
 [llm] call 1 (seed) 45.2s  in=15000 out=2000 cost=$0.15
@@ -460,239 +594,226 @@ strategy   : gen_iter0  (survey mode)
 examples   : 500  in 45.2s
 outcomes   : {'parsed_clean': 150, 'parsed_diag': 80, 'rejected': 270}
 accept rate: 46.0%
-xml-shaped : 98.0%
 crashes    : 0
 productions: 22/27   missing: x_bom, x_invalid_utf8
 diag templates reached: 15
 ```
 
+### Replay any run
+
+Every run records its full transcript. Reproduce it exactly:
+
+```bash
+python -m agent.loop --backend replay --run-id <original-run-id>
+```
+
+Note: replay requires the same code version — if strategies or prompts
+changed, the recorded call sequence may no longer match.
+
+---
+
 ## Advanced Usage
 
-### Running a Single Strategy
-
-Test a specific strategy without the agentic loop:
+### Run a single strategy without the agent
 
 ```bash
-python -m fuzzer.campaign baseline \
-  --max-examples 500 \
-  --out runs/baseline-test
+# Baseline strategy
+python -m fuzzer.campaign baseline --max-examples 500 --out runs/baseline-test
+
+# An LLM-generated strategy from a previous run
+python -m fuzzer.campaign gen_iter0 --target expat -n 500
 ```
 
-### Hunt Mode (Crash Minimization)
-
-Enable Hypothesis's shrinker for crash minimization:
+### Hunt mode (crash minimization)
 
 ```bash
-python -m fuzzer.campaign my-strategy \
-  --mode hunt \
-  --max-examples 1000 \
-  --out runs/hunt
+python -m fuzzer.campaign gen_iter0 --mode hunt --max-examples 1000 --out runs/hunt
 ```
 
-### Independent Trials
+Hypothesis's shrinker minimizes any crashing input.
 
-Run a strategy with different seeds to measure variance:
+### Independent trials (measure variance)
 
 ```bash
-python -m fuzzer.campaign gen_iter0 \
-  --seed 11 \
-  --max-examples 500 \
-  --out runs/trial-11
-
-python -m fuzzer.campaign gen_iter0 \
-  --seed 22 \
-  --max-examples 500 \
-  --out runs/trial-22
-
-python -m fuzzer.campaign gen_iter0 \
-  --seed 33 \
-  --max-examples 500 \
-  --out runs/trial-33
+for seed in 11 22 33; do
+  python -m fuzzer.campaign gen_iter0 --seed $seed -n 500 --out runs/trial-$seed
+done
 ```
 
-### Custom Prompt Sets
-
-Use different prompt versions:
+### Multi-target parallel campaigns
 
 ```bash
-# v1: Original prompts
-python -m agent.loop --prompt-set v1 --run-id v1-run
-
-# v2: Added input-class mixture, marginal scoring
-python -m agent.loop --prompt-set v2 --run-id v2-run
-
-# v3-v5: Further refinements
-python -m agent.loop --prompt-set v5 --run-id v5-run
+python -m fuzzer.campaign gen_iter0 --parallel \
+  --targets mxml json http -w 3
 ```
 
-### Split Seed/Refine Models
+### Generated harnesses
 
-Use a powerful model for seeding, cheaper for refinement:
+Let the agent write a C harness for a new target, gate it structurally, and
+compile it:
 
 ```bash
-python -m agent.loop \
-  --backend openai \
-  --seed-model gpt-5 \
-  --refine-model gpt-4o-mini \
-  --run-id hybrid-run
+python -m agent.harness_gen --target expat --backend openai --compile
+python -m agent.loop --backend openai --target expat --use-generated-harness
 ```
 
-### Leak Detection Pass
+### Differential testing
 
-Separate pass with LeakSanitizer enabled:
+`fuzzer/differential.py` provides a `DifferentialEngine` that runs the same
+inputs through multiple parser targets and reports divergent diagnostics —
+useful for catching parser inconsistencies that a single-target campaign
+can't see. It is a library used by the test suite; wire it into your own
+script or extend a target to expose it.
+
+### Control experiment (vs classic fuzzers)
+
+Compare Stratagem's yield against libFuzzer/AFL++ on the same target:
 
 ```bash
-# Rebuild with leak detection
-cd harness
-ASAN_OPTIONS=detect_leaks=1 ./build.sh
-cd ..
-
-# Run campaign
-python -m agent.loop --backend replay --run-id leak-pass
+python scripts/run_control_experiment.py --target mxml --budget 500
 ```
+
+### Leak detection (separate pass)
+
+The main runs disable leak detection (`detect_leaks=0`) so leak reports don't
+bury real crashes. Leaks are hunted afterward over the recorded corpora:
+
+```bash
+python scripts/leak_pass.py            # every run
+python scripts/leak_pass.py my-run     # one run
+```
+
+The script re-runs corpus inputs with `detect_leaks=1` and writes
+`runs/analysis/leak_pass.json`.
+
+---
+
+## Developer Tools
+
+### Tests
+
+```bash
+pip install -r requirements-dev.txt
+
+python -m pytest agent -q        # hermetic agent suite (no harness/network)
+python -m agent.test_loop        # without pytest
+python -m agent.test_dx
+python -m agent.selftest
+python -m fuzzer.selftest
+```
+
+### Debug a run
+
+```bash
+python -m agent.debug --run-id loop --diagnose      # artifact-level diagnosis
+python -m agent.debug --run-id loop --transcript    # list recorded calls
+python -m agent.debug --run-id loop --call 3 --full # inspect one call
+python -m agent.debug --run-id loop --iteration 2
+python -m agent.debug --run-id loop --diagnose --json
+```
+
+Or record events during the run itself:
+
+```bash
+python -m agent.loop --backend replay --run-id demo --debug
+```
+
+### Progress control
+
+```bash
+python -m agent.loop --backend openai --run-id demo            # auto (TTY bars)
+python -m agent.loop --backend openai --run-id demo --progress on
+python -m agent.loop --backend openai --run-id demo --progress off --status on
+```
+
+Progress goes to stderr so stdout stays parseable.
+`STRATAGEM_NO_PROGRESS=1` disables it entirely.
+
+### Local CI
+
+```bash
+python scripts/ci.py --unit --cov   # unit tests on any OS
+python scripts/ci.py --full         # adds harness + replay-identity check
+```
+
+---
 
 ## Troubleshooting
 
-### Common Issues
+### "No recorded calls under runs/.../transcript"
 
-#### "No recorded calls under runs/.../transcript"
+Replay mode needs an existing transcript. Run once with a real backend first:
 
-**Cause**: Using replay mode without a transcript.
-
-**Solution**:
 ```bash
-# First run with a real backend to create a transcript
 python -m agent.loop --backend openai --run-id original
-
-# Then replay it
 python -m agent.loop --backend replay --run-id replay-copy
 ```
 
-#### "OPENAI_API_KEY is not set"
+### "OPENAI_API_KEY is not set"
 
-**Cause**: OpenAI backend configured but no key provided.
-
-**Solution**:
 ```bash
-# Set in .env
 echo "OPENAI_API_KEY=sk-your-key" >> .env
-
-# Or export in shell
+# or
 export OPENAI_API_KEY=sk-your-key
 ```
 
-#### "Harness not found at build/asan/harness"
+### "Harness not found at build/asan/harness"
 
-**Cause**: Harness not built.
-
-**Solution**:
 ```bash
-cd harness
-./build.sh
-cd ..
+cd harness && ./build.sh && cd ..
 ```
 
-#### "Validation failed: smoke test acceptance too low"
+### "Validation failed: smoke test acceptance too low"
 
-**Cause**: Generated strategy rejects most inputs at the parser's front door.
+Normal in early iterations — the loop will request repairs. If it persists,
+inspect `runs/<id>/iterations/iter-*/strategy.py`.
 
-**Solution**: This is normal during early iterations. The loop will request repairs. If it persists, check the strategy in `runs/*/iterations/iter-*/strategy.py`.
+### "Transcript exhausted after N calls"
 
-#### "Transcript exhausted after N calls"
+Code changed since the transcript was recorded. Regenerate with a real
+backend, or check out the matching code version.
 
-**Cause**: Code changed since transcript was recorded.
+### Docker issues
 
-**Solution**: Use a transcript that matches your code version, or regenerate with a real backend.
+| Error | Fix |
+|---|---|
+| `Permission denied` on `run.sh` | `chmod +x run.sh` |
+| ASan "Shadow memory range interleaves" | Ensure `run.sh` keeps `--security-opt seccomp=unconfined` |
+| Crash signatures all identical | Ensure `--cap-add SYS_PTRACE` is present (symbolization) |
 
-### Docker Issues
+### Build issues
 
-#### "Permission denied" when running ./run.sh
+| Error | Fix |
+|---|---|
+| `mxml.h: No such file or directory` | `./scripts/fetch_target.sh` |
+| Missing grammar | `./scripts/fetch_grammar.sh` |
 
-**Cause**: Script not executable.
+### LLM backend issues
 
-**Solution**:
-```bash
-chmod +x run.sh
-```
+- **CLI timeouts**: reduce `-n`/`-i`, use a faster model, check connectivity
+- **Usage limit reached**: the loop stops immediately on quota errors — wait
+  for reset, switch backend, or lower `--max-usd`
+- **Very slow campaigns**: lower `-n`; check harness speed with
+  `time build/asan/harness < input.xml`
 
-#### "seccomp=unconfined not supported"
-
-**Cause**: Docker seccomp not available (some cloud environments).
-
-**Solution**: Edit `run.sh` to remove `--security-opt seccomp=unconfined`, but be aware ASan may fail.
-
-### Build Issues
-
-#### "mxml.h: No such file or directory"
-
-**Cause**: Mini-XML not fetched or not in expected location.
-
-**Solution**:
-```bash
-./scripts/fetch_target.sh
-```
-
-#### "asan: Shadow memory range interleaves with an existing memory mapping"
-
-**Cause**: Docker's default seccomp profile blocks personality() call.
-
-**Solution**: Ensure `run.sh` includes `--security-opt seccomp=unconfined`.
-
-### LLM Backend Issues
-
-#### "claude CLI timed out after 1800s"
-
-**Cause**: Strategy too complex or model slow.
-
-**Solution**:
-- Reduce `max-examples` or iteration count
-- Use a faster model
-- Check network connectivity
-
-#### "usage limit reached"
-
-**Cause**: API quota exceeded.
-
-**Solution**:
-- Wait for quota reset
-- Use a different backend
-- Reduce campaign size
-
-### Performance Issues
-
-#### Campaign running very slowly
-
-**Possible causes**:
-- Harness invocations slow (check with `time build/asan/harness < input.xml`)
-- Too many examples per iteration
-- LLM backend latency
-
-**Solutions**:
-- Reduce `max-examples`
-- Use faster LLM model
-- Check if sanitizers are slowing down (expected but shouldn't be extreme)
-
-#### Out of memory
-
-**Cause**: Large corpus or deep nesting.
-
-**Solution**:
-- Reduce `max-examples`
-- Check strategy for runaway recursion
-- Increase system RAM
+---
 
 ## Next Steps
 
-- Read [docs/design-decisions.md](docs/design-decisions.md) to understand engineering choices
-- Review [docs/findings.md](docs/findings.md) for what the project discovered
-- Examine [grammar/ADAPTATIONS.md](grammar/ADAPTATIONS.md) for grammar details
-- Check [todo.md](todo.md) for future expansion ideas
+- [README.md](README.md) — feature overview and quick examples
+- [docs/architecture.md](docs/architecture.md) — system architecture
+- [docs/tutorial-adding-targets.md](docs/tutorial-adding-targets.md) — add a new target
+- [docs/design-decisions.md](docs/design-decisions.md) — engineering rationale (D1–D13)
+- [docs/findings.md](docs/findings.md) — what past campaigns discovered
+- [docs/developer-experience.md](docs/developer-experience.md) — tests, debug, CI
+- [agent/README.md](agent/README.md) — agent internals and enhancement details
+- [grammar/ADAPTATIONS.md](grammar/ADAPTATIONS.md) — grammar vs parser differences
+- [CONTRIBUTING.md](CONTRIBUTING.md) — how to contribute
 
 ## Getting Help
 
-For issues specific to:
-- **This framework**: Check the documentation and existing issues
-- **Mini-XML**: See https://github.com/michaelrsweet/mxml
-- **Hypothesis**: See https://hypothesis.readthedocs.io/
-- **Claude Code**: See https://docs.anthropic.com/
-- **OpenAI API**: See https://platform.openai.com/docs
+- **This framework**: check docs and existing issues
+- **Mini-XML**: https://github.com/michaelrsweet/mxml
+- **Hypothesis**: https://hypothesis.readthedocs.io/
+- **Claude Code**: https://docs.anthropic.com/
+- **OpenAI API**: https://platform.openai.com/docs
