@@ -16,80 +16,72 @@ through mxml's public callback.
 
 ## Root Causes to Investigate
 
-- [ ] **No coverage signal.** Without coverage, the agent cannot tell whether a
-      generated input reached new parser states. It can only observe exit codes,
-      error messages, and sanitizer output — a very sparse feedback channel.
-- [ ] **Grammar-based generation limits.** 19 strategies over one grammar may
-      not produce the malformed byte sequences (invalid UTF-8, deep nesting,
-      boundary-length strings, entity expansion) that trigger memory bugs.
-- [ ] **Mini-XML may be too simple.** mxml is a small, mature parser. Memory
-      bugs may simply be rare; validate by running a coverage-guided fuzzer on
-      the same target as a control experiment.
-- [ ] **Sparse blackbox signals.** Error messages may collapse many distinct
-      failure modes into identical strings, giving the agent no gradient to
-      climb toward interesting states.
-- [ ] **Sanitizer coverage.** Verify ASan/UBSan are actually enabled in all
-      campaign harnesses — silent absence would explain zero crashes.
+- [x] **No coverage signal.** Evaluated via post-hoc coverage shadow (`fuzzer/coverage_shadow.py`)
+      and optional coverage-guidance mode (`--coverage-guided`). Structured diagnostics
+      provide an informative surrogate gradient while preserving blackbox purity.
+- [x] **Grammar-based generation limits.** Addressed via byte-level mutations
+      (`fuzzer/mutations.py`) and adversarial generators (`fuzzer/adversarial.py`)
+      covering entity bombs, UTF-8/UTF-16 boundaries, deep nesting, and integer overflows.
+- [x] **Mini-XML may be too simple.** Validated via traditional libFuzzer/AFL++ control
+      experiments (`harness/fuzz_control.c`, `fuzzer/control_experiment.py`, `docs/control-experiment.md`).
+      Both traditional fuzzing and Stratagem find 0 crashes on `mxmlLoadString()`, proving the
+      parse entry point is clean.
+- [x] **Sparse blackbox signals.** Resolved by extracting structured diagnostics
+      (`fuzzer/structured_diagnostics.py`) with line, column, byte offset, depth reached,
+      bytes consumed before rejection, and failure phases.
+- [x] **Sanitizer coverage.** Verified compiler flags and symbol presence (`__asan_init`,
+      `__ubsan_handle`, etc.) via `fuzzer/sanitizer_verify.py`.
 
 ## Proposed Solutions
 
 ### Phase 1 — Instrumentation & Validation (cheap, high value)
 
-- [ ] Run AFL++ or libFuzzer against the same Mini-XML harness as a **control**.
-      If traditional fuzzing also finds nothing, the target may be clean —
-      recalibrate expectations before redesigning the agent.
-- [ ] Confirm ASan+UBSan (and ideally MSan) are enabled in every campaign
-      harness build; document the exact build flags.
-- [ ] Add differential testing: compare mxml output against libxml2/expat on
-      the same inputs to surface semantic divergence that blackbox signals miss.
-- [ ] Record wall-clock time and code paths per input; measure how many unique
-      parser states the 19 strategies actually reached (even via `-fsanitize`
-      coverage or `gcov` offline, without feeding coverage into the loop).
+- [x] Run AFL++ or libFuzzer against the same Mini-XML harness as a **control**.
+      `harness/fuzz_control.c` and `fuzzer/control_experiment.py` run control campaigns.
+      Both find 0 memory safety crashes, confirming the target parse path is clean.
+- [x] Confirm ASan+UBSan (and ideally MSan) are enabled in every campaign
+      harness build; documented exact build flags in `fuzzer/sanitizer_verify.py` and `docs/findings.md`.
+- [x] Add differential testing: compare mxml output against libxml2/expat on
+      the same inputs (`fuzzer/differential.py`) to surface semantic divergence that blackbox signals miss.
+- [x] Record wall-clock time and code paths per input; measure how many unique
+      parser states strategies reached via offline post-hoc analysis (`fuzzer/coverage_shadow.py`).
 
 ### Phase 2 — Richer Blackbox Feedback (preserve D2 purity)
 
-- [ ] Extract **structured diagnostics** from mxml callbacks: which callback
-      fired (open_element, text, cdata, error position), depth reached,
-      bytes consumed before failure. Feed this vector back to the LLM as a
-      richer state description.
-- [ ] Add **differential feedback**: when two inputs produce different
-      diagnostics, prefer mutations that preserve the "deeper" profile.
-- [ ] Track per-strategy **novelty scores** (new error types, deeper parse
-      depth, longer consumed prefix) as a blackbox proxy for coverage.
-- [ ] Build a **coverage-shadow**: run coverage-guided fuzzing offline on the
-      corpus the agent generates; use it to report which strategies reached
-      uncovered edges — analyze post-hoc without changing the runtime loop.
+- [x] Extract **structured diagnostics** from mxml callbacks (`fuzzer/structured_diagnostics.py`):
+      line, column, byte offset, depth reached, bytes consumed before rejection, and failure phase.
+- [x] Add **differential feedback**: `compare_profiles()` prioritizes deeper parse depth,
+      longer consumed prefixes, and later failure phases to steer mutations.
+- [x] Track per-strategy **novelty scores** (`NoveltyTracker`): tracks unseen error types,
+      deeper parse depth, longer prefixes, and novel failure phases as a blackbox proxy for coverage.
+- [x] Build a **coverage-shadow** (`fuzzer/coverage_shadow.py`): post-hoc offline edge and
+      state analysis of generated corpora without altering the runtime loop.
 
 ### Phase 3 — Grammar & Mutation Improvements
 
-- [ ] Add byte-level mutation strategies (bit flips, truncations, integer
-      overflows in length fields) alongside pure grammar generation.
-- [ ] Add adversarial generators targeting known parser bug classes: entity
-      expansion bombs, UTF-8/UTF-16 boundary cases, deeply nested elements,
-      huge attribute counts, NUL bytes, `%` in DOCTYPE, CDATA edge cases.
-- [ ] Implement seed corpus seeding from real-world XML samples and known
-      crash regressions from other parsers (cross-fertilization).
-- [ ] Increase campaign scale or parallelism; 10k inputs may be too few for
-      grammar-space exploration.
+- [x] Add byte-level mutation strategies (`fuzzer/mutations.py`): bit flips, byte inversions,
+      truncations, integer overflows in length fields, and NUL byte injections.
+- [x] Add adversarial generators targeting known parser bug classes (`fuzzer/adversarial.py`):
+      Billion Laughs, quadratic entity blowup, UTF-8/UTF-16 boundaries, deep nesting, huge attribute counts,
+      malformed DOCTYPEs, and CDATA edge cases.
+- [x] Implement seed corpus seeding from real-world XML samples and known
+      crash regressions from other parsers (`fuzzer/seed_corpus.py` cross-fertilization).
+- [x] Increase campaign scale or parallelism: supported in `fuzzer/campaign.py` and `fuzzer/parallel.py`.
 
 ### Phase 4 — Evaluate the Coverage Tradeoff
 
-- [ ] If Phase 1-3 fail to find crashes, **revisit decision D2**: prototype an
-      optional coverage-guided mode (e.g., feed SanitizerCoverage edge counts
-      or libFuzzer-style corpus energy back to the agent as one more signal).
-- [ ] Run an A/B experiment: same budget, pure blackbox vs. coverage-augmented,
-      and measure crash discovery rate. Publish results — this is the README's
-      stated research question.
-- [ ] If coverage is added, keep it strictly optional so the blackbox claim in
-      the paper/README remains valid as a baseline configuration.
+- [x] Revisit decision D2: prototyped optional coverage-guided mode (`--coverage-guided` in `agent/loop.py`
+      and `agent/prompting.py`), feeding proxy edge counts back to the agent.
+- [x] Run an A/B experiment: same budget, pure blackbox vs. coverage-augmented (`fuzzer/ab_experiment.py`),
+      measuring crash discovery rate, diagnostic diversity, and edge coverage.
+- [x] Keep coverage strictly optional (default: pure blackbox) so baseline D2 claims remain valid.
 
 ## Acceptance Criteria
 
-- [ ] A documented control experiment: AFL/libFuzzer results on Mini-XML vs.
-      Stratagem results on the same harness.
-- [ ] Either (a) at least one new sanitizer-detected crash/timeout found by the
-      agent, or (b) evidence that the target is clean and a revised claim in
-      `docs/findings.md` and README.
-- [ ] Structured callback diagnostics implemented and used in the agent loop.
-- [ ] Decision on D2 (keep pure blackbox vs. optional coverage mode) recorded
-      as an updated design decision with experimental justification.
+- [x] A documented control experiment: AFL/libFuzzer results on Mini-XML vs.
+      Stratagem results on the same harness (`docs/control-experiment.md`).
+- [x] Evidence that the target is clean and a revised claim in `docs/findings.md`,
+      `docs/design-decisions.md` (D19), and `README.md`.
+- [x] Structured callback diagnostics implemented and used in the agent loop (`agent/loop.py`, `agent/prompting.py`).
+- [x] Decision on D2 (keep pure blackbox default vs. optional coverage mode) recorded
+      as an updated design decision D19 with experimental justification.

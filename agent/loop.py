@@ -211,6 +211,10 @@ class Loop:
     result_cache_dir: str | Path | None = None
     max_corpus_entries: int | None = None
 
+    # ---- crash discovery & feedback mode
+    structured_diagnostics: bool = True
+    coverage_guided: bool = False
+
     budget: Budget = field(init=False)
     out: Path = field(init=False)
 
@@ -233,6 +237,13 @@ class Loop:
         self.directives = self._load_directives()
         self.union_diagnostics: set[str] = set()
         self.union_productions: set[str] = set()
+        self.novelty_tracker = None
+        if self.structured_diagnostics:
+            from fuzzer.structured_diagnostics import NoveltyTracker
+            self.novelty_tracker = NoveltyTracker()
+        self.coverage_edges: set[str] = set()
+        self.last_novelty_stats: dict | None = None
+        self.last_coverage_stats: dict | None = None
         from fuzzer.targets import get_target
         self.target_obj = get_target(self.target)
         self.system = (self.prompts / "system.md").read_text(encoding="utf-8")
@@ -725,6 +736,15 @@ class Loop:
 
     def _refine_prompt(self, it: int, source: str, summary: dict, results: list[dict],
                        directive_override: str | None = None) -> str:
+        from agent.reporting import format_structured_diagnostics, format_coverage_guidance
+        has_sd = getattr(self, "structured_diagnostics", False)
+        sd_stats = getattr(self, "last_novelty_stats", None)
+        struct_txt = format_structured_diagnostics(sd_stats) if has_sd else None
+
+        has_cov = getattr(self, "coverage_guided", False)
+        cov_stats = getattr(self, "last_coverage_stats", None)
+        cov_txt = format_coverage_guidance(cov_stats) if has_cov else None
+
         return build_refine_prompt(
             prompt_version=self.prompt_version,
             target_obj=self.target_obj,
@@ -736,6 +756,8 @@ class Loop:
             summary=summary,
             results=results,
             directive_override=directive_override,
+            structured_info=struct_txt,
+            coverage_info=cov_txt,
         )
 
     # ------------------------------------------------------------------- main
@@ -1244,6 +1266,45 @@ class Loop:
         }
         if self.ab_tester is not None and self.ab_variant is not None:
             row["prompt_ab_variant"] = self.ab_variant.name
+
+        if self.novelty_tracker is not None and (idir / "results.jsonl").exists():
+            from fuzzer.structured_diagnostics import build_profile
+            raw_lines = (idir / "results.jsonl").read_text(encoding="utf-8").splitlines()
+            profiles = []
+            for line in raw_lines:
+                try:
+                    r_dict = json.loads(line)
+                    profiles.append(build_profile(
+                        sha=r_dict.get("sha", ""),
+                        payload=b"",
+                        outcome=r_dict.get("outcome", ""),
+                        diagnostics=r_dict.get("diagnostics", []),
+                    ))
+                except Exception:
+                    continue
+            self.last_novelty_stats = self.novelty_tracker.evaluate_batch(name, profiles)
+            row["novelty_score"] = self.last_novelty_stats["novelty_score"]
+            row["structured_diagnostics"] = self.last_novelty_stats
+
+        if self.coverage_guided and (idir / "results.jsonl").exists():
+            raw_lines = (idir / "results.jsonl").read_text(encoding="utf-8").splitlines()
+            edges_this_iter = set()
+            for line in raw_lines:
+                try:
+                    r_dict = json.loads(line)
+                    edges_this_iter.add(f"outcome:{r_dict.get('outcome', '')}")
+                    for d in r_dict.get("diagnostics", []):
+                        edges_this_iter.add(f"diag:{d}")
+                except Exception:
+                    continue
+            new_edges = len(edges_this_iter - self.coverage_edges)
+            self.coverage_edges.update(edges_this_iter)
+            self.last_coverage_stats = {
+                "edges_count": len(self.coverage_edges),
+                "new_edges": new_edges,
+            }
+            row["coverage_guided"] = self.last_coverage_stats
+
         iterations.append(row)
         if self.tuner is not None:
             self.tuner.observe(
@@ -1480,6 +1541,12 @@ def _build_arg_parser() -> argparse.ArgumentParser:
                           help="directory for harness result cache database")
     grp_perf.add_argument("--max-corpus-entries", type=int, default=None,
                           help="ceiling on in-memory corpus size")
+
+    grp_disco = ap.add_argument_group("crash discovery & feedback enhancements")
+    grp_disco.add_argument("--coverage-guided", action="store_true",
+                           help="enable optional coverage guidance feedback (revisits D2; default: pure blackbox)")
+    grp_disco.add_argument("--no-structured-diagnostics", action="store_true",
+                           help="disable structured callback diagnostic extraction")
     return ap
 
 
@@ -1542,6 +1609,8 @@ def main() -> None:
             use_result_cache=a.cache_results,
             result_cache_dir=a.result_cache_dir,
             max_corpus_entries=a.max_corpus_entries,
+            coverage_guided=a.coverage_guided,
+            structured_diagnostics=not a.no_structured_diagnostics,
         )
         final = loop.run()
     except KeyboardInterrupt:

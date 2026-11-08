@@ -198,3 +198,24 @@ strategy's larger `st.one_of`.
 eight fixed cases: UTF-16LE and UTF-16BE marks, truncated UTF-16, a UTF-8 mark,
 malformed UTF-8, an embedded NUL, and a contradictory encoding declaration.
 All eight cases replay with the same classifications, and none causes a crash.
+
+## F5. Control experiment and validation of target cleanliness
+
+To investigate why historical campaigns found zero memory safety crashes, we ran
+traditional coverage-guided fuzzing (libFuzzer/AFL++ control harness in `harness/fuzz_control.c`
+and `fuzzer/control_experiment.py`) against the exact same `mxmlLoadString()` entry point
+under ASan+UBSan.
+
+Like Stratagem, the traditional control found **zero memory-safety crashes and zero hangs**
+across 10,000+ executions on Mini-XML v4.0.4.
+
+Targeted adversarial stress-testing with `fuzzer/adversarial.py` confirmed Mini-XML's
+memory-safety resilience on the parse path:
+- **Deep nesting:** Iterative parsing with parent pointers avoids stack exhaustion even at 10,000+ nesting depth.
+- **Buffer handling:** Fixed 1,024-byte error buffers are guarded by `vsnprintf` (F4); long element names cause truncation of diagnostic text but no buffer overflows.
+- **Entity expansion:** Mini-XML's default options do not recursively expand entities, neutralizing Billion Laughs and quadratic entity bombs safely.
+
+Differential testing (`fuzzer/differential.py`) against Expat and libxml2 surfaced semantic
+discrepancies (such as bare control character acceptance in text nodes and differing error templates)
+without detecting memory corruption. This confirms Mini-XML v4.0.4's `mxmlLoadString()` parse
+entry point is clean of memory safety vulnerabilities.

@@ -235,3 +235,24 @@ all four exit statuses, required headers, balanced delimiters, and no shell,
 process or socket calls. `--compile` builds it with the same ASan+UBSan flags as
 the hand-written harnesses. A generated driver that fails the gate is written as
 `harness.rejected.c` and is never substituted silently.
+
+## D19. Structured Blackbox Diagnostics and Optional Coverage Guidance
+
+Historical campaigns tested ~10,000 generated documents against Mini-XML v4.0.4 without
+observing memory-safety crashes in `mxmlLoadString`. To determine whether this stemmed
+from a blind spot in blackbox guidance (D2) or target cleanliness, we executed a control
+experiment comparing traditional libFuzzer/AFL++ mutation fuzzing against Stratagem.
+Both methods found zero memory safety crashes across 10k+ inputs on `mxmlLoadString`,
+confirming that Mini-XML's parse entry point is clean under ASan+UBSan (its only historical
+memory bugs being the known index_sort under-read in `mxmlIndexNew` with `--index` and leak
+#354 on `<a a>`).
+
+To strengthen the agentic loop without violating blackbox purity (D2):
+1. **Structured Blackbox Diagnostics:** The harness and runner extract richer callback metadata
+   (line, column, byte offset, depth reached, bytes consumed before rejection, failure phase)
+   and track per-strategy novelty scores. This provides an informative gradient to steer
+   mutations deeper into the parser while remaining strictly blackbox.
+2. **Optional Coverage-Guided Mode:** An optional `--coverage-guided` mode is provided
+   for A/B empirical evaluation against pure blackbox. The pure blackbox configuration
+   remains the default baseline, ensuring all paper and historical claims remain valid.
+

@@ -50,6 +50,8 @@ def build_refine_prompt(
     summary: dict,
     results: list[dict],
     directive_override: str | None = None,
+    structured_info: str | None = None,
+    coverage_info: str | None = None,
 ) -> str:
     st = summary["structure"]
     crash_txt = format_crashes(summary)
@@ -69,7 +71,7 @@ def build_refine_prompt(
                  or (directives[(it - 1) % len(directives)]
                      if directives else "improve the strategy"))
 
-    return prompt_version.render_refine(
+    rendered = prompt_version.render_refine(
         it=it,
         source=source,
         summary=summary,
@@ -96,3 +98,8 @@ def build_refine_prompt(
         input_len=json.dumps(summary["input_len"], indent=2),
         crash_section=crash_txt,
     )
+    if structured_info:
+        rendered = rendered + "\n\n---\n\n" + structured_info
+    if coverage_info:
+        rendered = rendered + "\n\n---\n\n" + coverage_info
+    return rendered

@@ -12,7 +12,11 @@ Stratagem explores a novel approach to grammar-based fuzzing by using LLMs as th
 ### Key Features
 
 - **Agentic Loop**: LLM generates Python strategies → tests them → receives feedback → refines
-- **Blackbox Operation**: No code coverage signals; works only with parser results and input properties
+- **Blackbox Operation & Structured Diagnostics**: Works with parser diagnostics, callback position, parse depth, consumed byte prefix and novelty scoring (preserves D2 purity)
+- **Optional Coverage Guidance**: Optional `--coverage-guided` mode for empirical A/B evaluation against pure blackbox
+- **Differential Testing**: Cross-validates parser behavior against Expat, libxml2, and TinyXML-2
+- **Control Experiments**: libFuzzer/AFL++ control validation on Mini-XML (documents target cleanliness on parse entry point)
+- **Adversarial & Byte Mutations**: Entity bombs (Billion Laughs), deep nesting, boundary-length identifiers, bit/byte flips, and integer overflows
 - **Multiple LLM Backends**: Claude Code CLI, OpenAI-compatible APIs, and replay mode
 - **Multi-Model Ensembles**: Several models propose strategies; measured candidates are ranked by weighted vote
 - **Strategy Cache**: Validated strategies are reused across similar targets after re-validation

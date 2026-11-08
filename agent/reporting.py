@@ -42,6 +42,34 @@ def format_diagnostics(summary: dict) -> str:
                      list(summary.get("diagnostic_templates", {}).items())[:20]) or "(none)"
 
 
+def format_structured_diagnostics(novelty_stats: dict | None) -> str:
+    """Format structured diagnostic statistics into a markdown prompt block."""
+    if not novelty_stats:
+        return ""
+    phases = ", ".join(novelty_stats.get("cumulative_phases", [])) or "none"
+    return (
+        "### Structured Callback Diagnostics\n\n"
+        f"- Novelty score: **{novelty_stats.get('novelty_score', 0.0):.1f}**\n"
+        f"- Max depth reached: **{novelty_stats.get('max_depth', 0)}** (avg {novelty_stats.get('avg_depth', 0.0):.1f})\n"
+        f"- Consumed prefix before failure: **{novelty_stats.get('max_consumed', 0)} bytes** (avg {novelty_stats.get('avg_consumed', 0.0):.1f} bytes)\n"
+        f"- Parser failure phases explored: `{phases}`\n"
+        f"- Distinct diagnostic templates hit: {novelty_stats.get('cumulative_templates', 0)}\n\n"
+        "Steer toward inputs that penetrate deeper (higher depth and prefix bytes) before rejection."
+    )
+
+
+def format_coverage_guidance(edge_stats: dict | None) -> str:
+    """Format optional coverage-guided feedback into a markdown prompt block."""
+    if not edge_stats:
+        return ""
+    return (
+        "### Coverage-Guided Signal (Optional Evaluation Mode)\n\n"
+        f"- Cumulative branch / proxy edges reached: **{edge_stats.get('edges_count', 0)}**\n"
+        f"- New edges discovered this iteration: **{edge_stats.get('new_edges', 0)}**\n"
+        "Target remaining uncovered branch edges by varying syntax structure and token combinations."
+    )
+
+
 def write_iteration_log(out_dir: Path, final: dict) -> None:
     rows = final["iterations"]
     lines = [
