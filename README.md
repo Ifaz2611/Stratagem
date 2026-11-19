@@ -9,6 +9,16 @@ An innovative blackbox fuzzing framework that leverages Large Language Models (L
 
 Stratagem explores a novel approach to grammar-based fuzzing by using LLMs as the driving intelligence behind test strategy generation. Unlike traditional mutation-based fuzzing, an agent writes Hypothesis strategies in Python, tests them against real parsers, receives feedback, and iteratively improves the strategy in a closed loop.
 
+### Paper
+
+**[Stratagem: LLM-Synthesized Property-Based Generators for Blackbox Grammar Fuzzing](Paper/Stratagem_IEEE_V1.pdf)** (IEEE format)
+
+<a href="Paper/Stratagem_IEEE_V1.pdf">
+  <img src="Paper/preview.png" alt="First page of the Stratagem paper" width="49%">
+</a>
+
+Click the preview to read the full paper. The LaTeX source is available at [Paper/Stratagem_IEEE_corrected.tex](Paper/Stratagem_IEEE_corrected.tex).
+
 ### Key Features
 
 - **Agentic Loop**: LLM generates Python strategies → tests them → receives feedback → refines
@@ -411,6 +421,7 @@ The ANTLR grammars are adapted for specific parser behaviors. See `grammar/ADAPT
 
 ## Documentation
 
+- [Paper/Stratagem_IEEE_V1.pdf](Paper/Stratagem_IEEE_V1.pdf) - Project paper (IEEE format)
 - [getstart.md](getstart.md) - Installation and usage guide
 - [docs/architecture.md](docs/architecture.md) - System architecture and component diagrams
 - [docs/api-reference.md](docs/api-reference.md) - API documentation for key modules
