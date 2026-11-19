@@ -16,6 +16,7 @@ Stratagem explores a novel approach to grammar-based fuzzing by using LLMs as th
 <a href="Paper/Stratagem_IEEE_V1.pdf">
   <img src="Paper/preview.png" alt="First page of the Stratagem paper" width="49%">
 </a>
+
 ### Key Features
 
 - **Agentic Loop**: LLM generates Python strategies → tests them → receives feedback → refines
